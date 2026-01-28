@@ -38,6 +38,8 @@ impl<'src> Iterator for Tokens<'src> {
             Some(c) => match c {
                 '(' => Token::new(TokenType::LeftParen, '(', None),
                 ')' => Token::new(TokenType::RightParen, ')', None),
+                '{' => Token::new(TokenType::LeftBrace, '{', None),
+                '}' => Token::new(TokenType::RightBrace, '}', None),
                 _ => unimplemented!("{c:#?}"),
             },
             None => {
@@ -47,5 +49,49 @@ impl<'src> Iterator for Tokens<'src> {
         };
 
         Some(token)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("(", vec![
+        "LEFT_PAREN ( null",
+        "EOF  null",
+    ])]
+    #[case("))", vec![
+        "RIGHT_PAREN ) null",
+        "RIGHT_PAREN ) null",
+        "EOF  null",
+    ])]
+    #[case("())))", vec![
+        "LEFT_PAREN ( null",
+        "RIGHT_PAREN ) null",
+        "RIGHT_PAREN ) null",
+        "RIGHT_PAREN ) null",
+        "RIGHT_PAREN ) null",
+        "EOF  null",
+    ])]
+    #[case("((()())", vec![
+        "LEFT_PAREN ( null",
+        "LEFT_PAREN ( null",
+        "LEFT_PAREN ( null",
+        "RIGHT_PAREN ) null",
+        "LEFT_PAREN ( null",
+        "RIGHT_PAREN ) null",
+        "RIGHT_PAREN ) null",
+        "EOF  null",
+    ])]
+    fn test_scan_parentheses(#[case] input: &str, #[case] expected_output: Vec<&str>) {
+        let scanner = Scanner::new(input);
+        let output = scanner
+            .scan_tokens()
+            .map(|t| t.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(output, expected_output);
     }
 }

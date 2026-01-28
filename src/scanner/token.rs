@@ -51,7 +51,7 @@ impl Display for Literal {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum TokenType {
     // Single-character tokens.
     LeftParen,

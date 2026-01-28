@@ -8,11 +8,17 @@ run path="test.lox":
 
 alias r := run
 
-# test with codecrafters
-test:
+# test locally with cargo
+test-local:
+    @cargo test
+
+alias tl := test-local
+
+# test remotely with codecrafters
+test-remote:
     @codecrafters test
 
-alias t := test
+alias tr := test-remote
 
 # submit to codecrafters
 submit:
