@@ -2,6 +2,9 @@
 use std::env;
 use std::fs;
 
+use codecrafters_interpreter::scanner::Scanner;
+use codecrafters_interpreter::scanner::token::Token;
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
@@ -23,10 +26,12 @@ fn main() {
             });
 
             if !file_contents.is_empty() {
-                // Placeholder, replace this line when implementing the scanner
-                panic!("Scanner not implemented");
+                let scanner = Scanner::new(&file_contents);
+                for token in scanner.scan_tokens() {
+                    println!("{}", token);
+                }
             } else {
-                println!("EOF  null");
+                println!("{}", Token::eof_token());
             }
         }
         _ => {
