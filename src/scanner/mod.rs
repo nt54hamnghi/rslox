@@ -40,6 +40,12 @@ impl<'src> Iterator for Tokens<'src> {
                 ')' => Token::new(TokenType::RightParen, ')', None),
                 '{' => Token::new(TokenType::LeftBrace, '{', None),
                 '}' => Token::new(TokenType::RightBrace, '}', None),
+                '*' => Token::new(TokenType::Star, '*', None),
+                '.' => Token::new(TokenType::Dot, '.', None),
+                ',' => Token::new(TokenType::Comma, ',', None),
+                '+' => Token::new(TokenType::Plus, '+', None),
+                '-' => Token::new(TokenType::Minus, '-', None),
+                ';' => Token::new(TokenType::Semicolon, ';', None),
                 _ => unimplemented!("{c:#?}"),
             },
             None => {
@@ -85,7 +91,35 @@ mod tests {
         "RIGHT_PAREN ) null",
         "EOF  null",
     ])]
-    fn test_scan_parentheses(#[case] input: &str, #[case] expected_output: Vec<&str>) {
+    #[case("}", vec![
+        "RIGHT_BRACE } null",
+        "EOF  null",
+    ])]
+    #[case("{{}}", vec![
+        "LEFT_BRACE { null",
+        "LEFT_BRACE { null",
+        "RIGHT_BRACE } null",
+        "RIGHT_BRACE } null",
+        "EOF  null",
+    ])]
+    #[case("}{}}", vec![
+        "RIGHT_BRACE } null",
+        "LEFT_BRACE { null",
+        "RIGHT_BRACE } null",
+        "RIGHT_BRACE } null",
+        "EOF  null",
+    ])]
+    #[case("{{)})}(", vec![
+        "LEFT_BRACE { null",
+        "LEFT_BRACE { null",
+        "RIGHT_PAREN ) null",
+        "RIGHT_BRACE } null",
+        "RIGHT_PAREN ) null",
+        "RIGHT_BRACE } null",
+        "LEFT_PAREN ( null",
+        "EOF  null",
+    ])]
+    fn test_scan_parentheses_and_braces(#[case] input: &str, #[case] expected_output: Vec<&str>) {
         let scanner = Scanner::new(input);
         let output = scanner
             .scan_tokens()
