@@ -23,8 +23,10 @@ fn main() {
                 return;
             };
 
+            let scanner = Scanner::new(&file_contents);
+
             let mut has_error = false;
-            for item in Scanner::scan_tokens(&file_contents) {
+            for item in scanner.scan_tokens() {
                 match item {
                     Ok(t) => println!("{t}"),
                     Err(e) => {

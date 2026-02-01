@@ -7,24 +7,30 @@ pub mod token;
 
 pub struct Scanner<'src> {
     // Raw source code
-    _raw: &'src str,
-    line: u32,
-    chars: Chars<'src>,
-    at_end: bool,
+    source: &'src str,
 }
 
 impl<'src> Scanner<'src> {
-    pub fn scan_tokens(source: &'src str) -> Scanner<'src> {
-        Self {
-            _raw: source,
+    pub fn new(source: &'src str) -> Scanner<'src> {
+        Self { source }
+    }
+
+    pub fn scan_tokens(&self) -> TokenStream<'src> {
+        TokenStream {
             line: 1,
-            chars: source.chars(),
+            chars: self.source.chars(),
             at_end: false,
         }
     }
 }
 
-impl<'src> Iterator for Scanner<'src> {
+pub struct TokenStream<'src> {
+    chars: Chars<'src>,
+    line: u32,
+    at_end: bool,
+}
+
+impl<'src> Iterator for TokenStream<'src> {
     type Item = Result<Token, Report>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -165,7 +171,9 @@ mod tests {
         "EOF  null",
     ])]
     fn test_scanner(#[case] input: &str, #[case] expected_output: Vec<&str>) {
-        let output = Scanner::scan_tokens(input)
+        let scanner = Scanner::new(input);
+        let output = scanner
+            .scan_tokens()
             .map(|t| t.unwrap().to_string())
             .collect::<Vec<_>>();
 
@@ -208,7 +216,9 @@ mod tests {
         "EOF  null",
     ])]
     fn test_scanner_lexical_errors(#[case] input: &str, #[case] expected_output: Vec<&str>) {
-        let output = Scanner::scan_tokens(input)
+        let scanner = Scanner::new(input);
+        let output = scanner
+            .scan_tokens()
             .map(|t| match t {
                 Ok(t) => t.to_string(),
                 Err(e) => e.to_string(),
