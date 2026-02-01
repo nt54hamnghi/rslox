@@ -1,33 +1,31 @@
 use std::str::Chars;
 
+use crate::error::Report;
 use crate::scanner::token::{Token, TokenType};
 
 pub mod token;
 
 pub struct Scanner<'src> {
-    source: &'src str,
+    // Raw source code
+    _raw: &'src str,
+    line: u32,
+    chars: Chars<'src>,
+    at_end: bool,
 }
 
 impl<'src> Scanner<'src> {
-    pub fn new(source: &'src str) -> Scanner<'src> {
-        Self { source }
-    }
-
-    pub fn scan_tokens(&self) -> Tokens<'_> {
-        Tokens {
-            chars: self.source.chars(),
+    pub fn scan_tokens(source: &'src str) -> Scanner<'src> {
+        Self {
+            _raw: source,
+            line: 1,
+            chars: source.chars(),
             at_end: false,
         }
     }
 }
 
-pub struct Tokens<'src> {
-    chars: Chars<'src>,
-    at_end: bool,
-}
-
-impl<'src> Iterator for Tokens<'src> {
-    type Item = Token;
+impl<'src> Iterator for Scanner<'src> {
+    type Item = Result<Token, Report>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.at_end {
@@ -36,25 +34,30 @@ impl<'src> Iterator for Tokens<'src> {
 
         let token = match self.chars.next() {
             Some(c) => match c {
-                '(' => Token::new(TokenType::LeftParen, '(', None),
-                ')' => Token::new(TokenType::RightParen, ')', None),
-                '{' => Token::new(TokenType::LeftBrace, '{', None),
-                '}' => Token::new(TokenType::RightBrace, '}', None),
-                '*' => Token::new(TokenType::Star, '*', None),
-                '.' => Token::new(TokenType::Dot, '.', None),
-                ',' => Token::new(TokenType::Comma, ',', None),
-                '+' => Token::new(TokenType::Plus, '+', None),
-                '-' => Token::new(TokenType::Minus, '-', None),
-                ';' => Token::new(TokenType::Semicolon, ';', None),
-                _ => unimplemented!("{c:#?}"),
+                '(' => Token::new(TokenType::LeftParen, c, None, self.line),
+                ')' => Token::new(TokenType::RightParen, c, None, self.line),
+                '{' => Token::new(TokenType::LeftBrace, c, None, self.line),
+                '}' => Token::new(TokenType::RightBrace, c, None, self.line),
+                '*' => Token::new(TokenType::Star, c, None, self.line),
+                '.' => Token::new(TokenType::Dot, c, None, self.line),
+                ',' => Token::new(TokenType::Comma, c, None, self.line),
+                '+' => Token::new(TokenType::Plus, c, None, self.line),
+                '-' => Token::new(TokenType::Minus, c, None, self.line),
+                ';' => Token::new(TokenType::Semicolon, c, None, self.line),
+                _ => {
+                    return Some(Err(Report::error(
+                        self.line,
+                        format!("Unexpected character: {c}"),
+                    )));
+                }
             },
             None => {
                 self.at_end = true;
-                Token::eof_token()
+                Token::new_eof(self.line)
             }
         };
 
-        Some(token)
+        Some(Ok(token))
     }
 }
 
@@ -162,10 +165,11 @@ mod tests {
         "EOF  null",
     ])]
     fn test_scan_parentheses_and_braces(#[case] input: &str, #[case] expected_output: Vec<&str>) {
-        let scanner = Scanner::new(input);
-        let output = scanner
-            .scan_tokens()
-            .map(|t| t.to_string())
+        let output = Scanner::scan_tokens(input)
+            .map(|t| match t {
+                Ok(t) => t.to_string(),
+                Err(e) => e.to_string(),
+            })
             .collect::<Vec<_>>();
 
         assert_eq!(output, expected_output);

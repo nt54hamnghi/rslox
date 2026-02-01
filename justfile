@@ -21,7 +21,9 @@ test-remote:
 alias tr := test-remote
 
 # submit to codecrafters
-submit:
-    @codecrafters submit
+submit message:
+    @git add .
+    @git commit --allow-empty -m "{{ message }}"
+    @git push origin master
 
 alias s := submit

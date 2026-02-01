@@ -8,6 +8,7 @@ rust-version = "1.91"
 [dependencies]
 anyhow = "1.0.68"                                # error handling
 bytes = "1.3.0"                                  # helps manage buffers
+miette = { version = "7.6.0", features = ["fancy"] }
 thiserror = "1.0.38"                             # error handling
 
 [dev-dependencies]

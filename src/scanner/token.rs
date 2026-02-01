@@ -7,21 +7,27 @@ pub struct Token {
     pub lexeme: String,
     pub literal: Option<Literal>,
     #[allow(unused)]
-    line: i32,
+    line: u32,
 }
 
 impl Token {
-    pub fn new(typ: TokenType, lexeme: impl Into<String>, literal: Option<Literal>) -> Token {
-        Token {
+    pub fn new(
+        typ: TokenType,
+        lexeme: impl Into<String>,
+        literal: Option<Literal>,
+        line: u32,
+    ) -> Self {
+        Self {
             typ,
             lexeme: lexeme.into(),
             literal,
-            line: 0,
+            line,
         }
     }
 
-    pub fn eof_token() -> Token {
-        Token::new(TokenType::Eof, "", None)
+    /// Return a new EOF token with the given line number.
+    pub fn new_eof(line: u32) -> Self {
+        Self::new(TokenType::Eof, "", None, line)
     }
 }
 

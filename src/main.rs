@@ -17,21 +17,29 @@ fn main() {
 
     match command.as_str() {
         "tokenize" => {
-            // You can use print statements as follows for debugging, they'll be visible when running tests.
-            eprintln!("Logs from your program will appear here!");
-
-            let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
+            let Ok(file_contents) = fs::read_to_string(filename) else {
                 eprintln!("Failed to read file {}", filename);
-                String::new()
-            });
+                println!("{}", Token::new_eof(0));
+                return;
+            };
 
-            if !file_contents.is_empty() {
-                let scanner = Scanner::new(&file_contents);
-                for token in scanner.scan_tokens() {
-                    println!("{}", token);
+            let mut has_error = false;
+            for item in Scanner::scan_tokens(&file_contents) {
+                match item {
+                    Ok(t) => println!("{t}"),
+                    Err(e) => {
+                        if !has_error {
+                            has_error = true;
+                        }
+                        eprintln!("{e}");
+                    }
                 }
+            }
+
+            if has_error {
+                std::process::exit(65);
             } else {
-                println!("{}", Token::eof_token());
+                std::process::exit(0);
             }
         }
         _ => {
