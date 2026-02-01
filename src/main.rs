@@ -2,6 +2,7 @@
 use std::env;
 use std::fs;
 
+use codecrafters_interpreter::scanner::ScanResult;
 use codecrafters_interpreter::scanner::Scanner;
 use codecrafters_interpreter::scanner::token::Token;
 
@@ -26,10 +27,11 @@ fn main() {
             let scanner = Scanner::new(&file_contents);
 
             let mut has_error = false;
-            for item in scanner.scan_tokens() {
-                match item {
-                    Ok(t) => println!("{t}"),
-                    Err(e) => {
+            for result in scanner.scan_tokens() {
+                match result {
+                    ScanResult::Comment => continue,
+                    ScanResult::Result(Ok(t)) => println!("{t}"),
+                    ScanResult::Result(Err(e)) => {
                         if !has_error {
                             has_error = true;
                         }

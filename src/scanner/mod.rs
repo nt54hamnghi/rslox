@@ -31,8 +31,24 @@ pub struct TokenStream<'src> {
     at_end: bool,
 }
 
+#[derive(Debug)]
+pub enum ScanResult {
+    Result(Result<Token, Report>),
+    Comment,
+}
+
+impl ScanResult {
+    fn ok(token: Token) -> ScanResult {
+        Self::Result(Ok(token))
+    }
+
+    fn err(error: Report) -> ScanResult {
+        Self::Result(Err(error))
+    }
+}
+
 impl<'src> Iterator for TokenStream<'src> {
-    type Item = Result<Token, Report>;
+    type Item = ScanResult;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.at_end {
@@ -67,11 +83,20 @@ impl<'src> Iterator for TokenStream<'src> {
                     Some(nc) => self.make_token_from(TokenType::GreaterEqual, [c, nc]),
                     None => self.make_token(TokenType::Greater, c),
                 },
+                '/' => match self.next_match('/') {
+                    Some(_) => {
+                        while let Some(current) = self.chars.peek()
+                            && *current != '\n'
+                        {
+                            self.chars.next();
+                        }
+                        return Some(ScanResult::Comment);
+                    }
+                    None => self.make_token(TokenType::Slash, c),
+                },
                 _ => {
-                    return Some(Err(Report::error(
-                        self.line,
-                        format!("Unexpected character: {c}"),
-                    )));
+                    let report = Report::error(self.line, format!("Unexpected character: {c}"));
+                    return Some(ScanResult::err(report));
                 }
             },
             None => {
@@ -80,7 +105,7 @@ impl<'src> Iterator for TokenStream<'src> {
             }
         };
 
-        Some(Ok(token))
+        Some(ScanResult::ok(token))
     }
 }
 
@@ -143,6 +168,29 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
+    #[case("//Comment", vec![
+        "EOF  null",
+    ])]
+    #[case("(///Unicode:£§᯽☺♣)", vec![
+        "LEFT_PAREN ( null",
+        "EOF  null",
+    ])]
+    #[case("/", vec![
+        "SLASH / null",
+        "EOF  null",
+    ])]
+    #[case("({(<=-+)})//Comment", vec![
+        "LEFT_PAREN ( null",
+        "LEFT_BRACE { null",
+        "LEFT_PAREN ( null",
+        "LESS_EQUAL <= null",
+        "MINUS - null",
+        "PLUS + null",
+        "RIGHT_PAREN ) null",
+        "RIGHT_BRACE } null",
+        "RIGHT_PAREN ) null",
+        "EOF  null",
+    ])]
     #[case(">=", vec![
         "GREATER_EQUAL >= null",
         "EOF  null",
@@ -372,13 +420,16 @@ mod tests {
     ])]
     fn test_scanner(#[case] input: &str, #[case] expected_output: Vec<&str>) {
         let scanner = Scanner::new(input);
-        let output = scanner
-            .scan_tokens()
-            .map(|t| match t {
-                Ok(t) => t.to_string(),
-                Err(e) => e.to_string(),
-            })
-            .collect::<Vec<_>>();
+
+        let mut output = Vec::new();
+        for sr in scanner.scan_tokens() {
+            let s = match sr {
+                ScanResult::Comment => continue,
+                ScanResult::Result(Ok(token)) => token.to_string(),
+                ScanResult::Result(Err(e)) => e.to_string(),
+            };
+            output.push(s);
+        }
 
         assert_eq!(output, expected_output);
     }
