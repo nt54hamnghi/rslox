@@ -119,6 +119,48 @@ mod tests {
         "LEFT_PAREN ( null",
         "EOF  null",
     ])]
+    #[case("+-", vec![
+        "PLUS + null",
+        "MINUS - null",
+        "EOF  null",
+    ])]
+    #[case("++--**..,,;;", vec![
+        "PLUS + null",
+        "PLUS + null",
+        "MINUS - null",
+        "MINUS - null",
+        "STAR * null",
+        "STAR * null",
+        "DOT . null",
+        "DOT . null",
+        "COMMA , null",
+        "COMMA , null",
+        "SEMICOLON ; null",
+        "SEMICOLON ; null",
+        "EOF  null",
+    ])]
+    #[case("-+;.*;,", vec![
+        "MINUS - null",
+        "PLUS + null",
+        "SEMICOLON ; null",
+        "DOT . null",
+        "STAR * null",
+        "SEMICOLON ; null",
+        "COMMA , null",
+        "EOF  null",
+    ])]
+    #[case("({*-+;.})", vec![
+        "LEFT_PAREN ( null",
+        "LEFT_BRACE { null",
+        "STAR * null",
+        "MINUS - null",
+        "PLUS + null",
+        "SEMICOLON ; null",
+        "DOT . null",
+        "RIGHT_BRACE } null",
+        "RIGHT_PAREN ) null",
+        "EOF  null",
+    ])]
     fn test_scan_parentheses_and_braces(#[case] input: &str, #[case] expected_output: Vec<&str>) {
         let scanner = Scanner::new(input);
         let output = scanner
