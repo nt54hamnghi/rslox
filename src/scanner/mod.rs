@@ -164,7 +164,50 @@ mod tests {
         "RIGHT_PAREN ) null",
         "EOF  null",
     ])]
-    fn test_scan_parentheses_and_braces(#[case] input: &str, #[case] expected_output: Vec<&str>) {
+    fn test_scanner(#[case] input: &str, #[case] expected_output: Vec<&str>) {
+        let output = Scanner::scan_tokens(input)
+            .map(|t| t.unwrap().to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(output, expected_output);
+    }
+
+    #[rstest]
+    #[case("@", vec![
+        "[line 1] Error: Unexpected character: @",
+        "EOF  null",
+    ])]
+    #[case(",.$(#", vec![
+        "COMMA , null",
+        "DOT . null",
+        "[line 1] Error: Unexpected character: $",
+        "LEFT_PAREN ( null",
+        "[line 1] Error: Unexpected character: #",
+        "EOF  null",
+    ])]
+    #[case("%#$@@", vec![
+        "[line 1] Error: Unexpected character: %",
+        "[line 1] Error: Unexpected character: #",
+        "[line 1] Error: Unexpected character: $",
+        "[line 1] Error: Unexpected character: @",
+        "[line 1] Error: Unexpected character: @",
+        "EOF  null",
+    ])]
+    #[case("{(.#;*@+%)}", vec![
+        "LEFT_BRACE { null",
+        "LEFT_PAREN ( null",
+        "DOT . null",
+        "[line 1] Error: Unexpected character: #",
+        "SEMICOLON ; null",
+        "STAR * null",
+        "[line 1] Error: Unexpected character: @",
+        "PLUS + null",
+        "[line 1] Error: Unexpected character: %",
+        "RIGHT_PAREN ) null",
+        "RIGHT_BRACE } null",
+        "EOF  null",
+    ])]
+    fn test_scanner_lexical_errors(#[case] input: &str, #[case] expected_output: Vec<&str>) {
         let output = Scanner::scan_tokens(input)
             .map(|t| match t {
                 Ok(t) => t.to_string(),
