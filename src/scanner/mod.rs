@@ -52,12 +52,12 @@ impl<'src> Iterator for TokenStream<'src> {
                 '-' => Token::new(TokenType::Minus, c, None, self.line),
                 ';' => Token::new(TokenType::Semicolon, c, None, self.line),
                 '=' => match self.next_match('=') {
-                    Some(nc) => {
-                        let lexeme = [c, nc].iter().collect::<String>();
-                        Token::new(TokenType::EqualEqual, lexeme, None, self.line)
-                    }
-
+                    Some(nc) => Token::with_chars(TokenType::EqualEqual, &[c, nc], None, self.line),
                     None => Token::new(TokenType::Equal, c, None, self.line),
+                },
+                '!' => match self.next_match('=') {
+                    Some(nc) => Token::with_chars(TokenType::BangEqual, &[c, nc], None, self.line),
+                    None => Token::new(TokenType::Bang, c, None, self.line),
                 },
                 _ => {
                     return Some(Err(Report::error(
@@ -97,6 +97,40 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
+    #[case("!=", vec![
+        "BANG_EQUAL != null",
+        "EOF  null",
+    ])]
+    #[case("!!===", vec![
+        "BANG ! null",
+        "BANG_EQUAL != null",
+        "EQUAL_EQUAL == null",
+        "EOF  null",
+    ])]
+    #[case("!{!}(!===)=", vec![
+        "BANG ! null",
+        "LEFT_BRACE { null",
+        "BANG ! null",
+        "RIGHT_BRACE } null",
+        "LEFT_PAREN ( null",
+        "BANG_EQUAL != null",
+        "EQUAL_EQUAL == null",
+        "RIGHT_PAREN ) null",
+        "EQUAL = null",
+        "EOF  null",
+    ])]
+    #[case("{(!==$=#)}", vec![
+        "LEFT_BRACE { null",
+        "LEFT_PAREN ( null",
+        "BANG_EQUAL != null",
+        "EQUAL = null",
+        "[line 1] Error: Unexpected character: $",
+        "EQUAL = null",
+        "[line 1] Error: Unexpected character: #",
+        "RIGHT_PAREN ) null",
+        "RIGHT_BRACE } null",
+        "EOF  null",
+    ])]
     #[case("=", vec![
         "EQUAL = null",
         "EOF  null",

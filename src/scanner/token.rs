@@ -29,6 +29,20 @@ impl Token {
     pub fn new_eof(line: u32) -> Self {
         Self::new(TokenType::Eof, "", None, line)
     }
+
+    /// Create a new token from a slice of characters.
+    ///
+    /// This is a convenience method that converts a `&[char]` into a `String`
+    /// for the lexeme before calling [`Token::new`].
+    pub fn with_chars(
+        typ: TokenType,
+        lexeme: &[char],
+        literal: Option<Literal>,
+        line: u32,
+    ) -> Self {
+        let lexeme = lexeme.iter().collect::<String>();
+        Self::new(typ, lexeme, literal, line)
+    }
 }
 
 impl Display for Token {
