@@ -2,7 +2,7 @@ use std::iter::Peekable;
 use std::str::Chars;
 
 use crate::error::Report;
-use crate::scanner::token::{Token, TokenType};
+use crate::scanner::token::{Literal, Token, TokenType};
 
 pub mod token;
 
@@ -41,33 +41,31 @@ impl<'src> Iterator for TokenStream<'src> {
 
         let token = match self.chars.next() {
             Some(c) => match c {
-                '(' => Token::new(TokenType::LeftParen, c, None, self.line),
-                ')' => Token::new(TokenType::RightParen, c, None, self.line),
-                '{' => Token::new(TokenType::LeftBrace, c, None, self.line),
-                '}' => Token::new(TokenType::RightBrace, c, None, self.line),
-                '*' => Token::new(TokenType::Star, c, None, self.line),
-                '.' => Token::new(TokenType::Dot, c, None, self.line),
-                ',' => Token::new(TokenType::Comma, c, None, self.line),
-                '+' => Token::new(TokenType::Plus, c, None, self.line),
-                '-' => Token::new(TokenType::Minus, c, None, self.line),
-                ';' => Token::new(TokenType::Semicolon, c, None, self.line),
+                '(' => self.make_token(TokenType::LeftParen, c),
+                ')' => self.make_token(TokenType::RightParen, c),
+                '{' => self.make_token(TokenType::LeftBrace, c),
+                '}' => self.make_token(TokenType::RightBrace, c),
+                '*' => self.make_token(TokenType::Star, c),
+                '.' => self.make_token(TokenType::Dot, c),
+                ',' => self.make_token(TokenType::Comma, c),
+                '+' => self.make_token(TokenType::Plus, c),
+                '-' => self.make_token(TokenType::Minus, c),
+                ';' => self.make_token(TokenType::Semicolon, c),
                 '=' => match self.next_match('=') {
-                    Some(nc) => Token::with_chars(TokenType::EqualEqual, &[c, nc], None, self.line),
-                    None => Token::new(TokenType::Equal, c, None, self.line),
+                    Some(nc) => self.make_token_from(TokenType::EqualEqual, [c, nc]),
+                    None => self.make_token(TokenType::Equal, c),
                 },
                 '!' => match self.next_match('=') {
-                    Some(nc) => Token::with_chars(TokenType::BangEqual, &[c, nc], None, self.line),
-                    None => Token::new(TokenType::Bang, c, None, self.line),
+                    Some(nc) => self.make_token_from(TokenType::BangEqual, [c, nc]),
+                    None => self.make_token(TokenType::Bang, c),
                 },
                 '<' => match self.next_match('=') {
-                    Some(nc) => Token::with_chars(TokenType::LessEqual, &[c, nc], None, self.line),
-                    None => Token::new(TokenType::Less, c, None, self.line),
+                    Some(nc) => self.make_token_from(TokenType::LessEqual, [c, nc]),
+                    None => self.make_token(TokenType::Less, c),
                 },
                 '>' => match self.next_match('=') {
-                    Some(nc) => {
-                        Token::with_chars(TokenType::GreaterEqual, &[c, nc], None, self.line)
-                    }
-                    None => Token::new(TokenType::Greater, c, None, self.line),
+                    Some(nc) => self.make_token_from(TokenType::GreaterEqual, [c, nc]),
+                    None => self.make_token(TokenType::Greater, c),
                 },
                 _ => {
                     return Some(Err(Report::error(
@@ -98,6 +96,44 @@ impl<'src> TokenStream<'src> {
             return self.chars.next();
         }
         None
+    }
+
+    /// Creates a token at the current line with no literal value.
+    fn make_token(&self, typ: TokenType, lexeme: impl Into<String>) -> Token {
+        Token::new(typ, lexeme.into(), None, self.line)
+    }
+
+    /// Creates a token from items that can be collected into a String.
+    /// Useful for building lexemes from character iterators or arrays.
+    fn make_token_from<T, I>(&self, typ: TokenType, value: I) -> Token
+    where
+        I: IntoIterator<Item = T>,
+        String: FromIterator<T>,
+    {
+        let lexeme = value.into_iter().collect::<String>();
+        self.make_token(typ, lexeme)
+    }
+
+    /// Creates a token with an associated literal value (e.g., the numeric value for NUMBER tokens,
+    /// the string content for STRING tokens).
+    fn make_literal_token(
+        &self,
+        typ: TokenType,
+        lexeme: impl Into<String>,
+        literal: Literal,
+    ) -> Token {
+        Token::new(typ, lexeme.into(), Some(literal), self.line)
+    }
+
+    /// Creates a token with a literal value from items that can be collected into a String.
+    /// Combines `make_token_from` with literal value support.
+    fn make_literal_token_from<T, I>(&self, typ: TokenType, value: I, literal: Literal) -> Token
+    where
+        I: IntoIterator<Item = T>,
+        String: FromIterator<T>,
+    {
+        let lexeme = value.into_iter().collect::<String>();
+        self.make_literal_token(typ, lexeme, literal)
     }
 }
 

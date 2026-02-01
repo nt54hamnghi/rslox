@@ -11,12 +11,7 @@ pub struct Token {
 }
 
 impl Token {
-    pub fn new(
-        typ: TokenType,
-        lexeme: impl Into<String>,
-        literal: Option<Literal>,
-        line: u32,
-    ) -> Self {
+    pub fn new(typ: TokenType, lexeme: String, literal: Option<Literal>, line: u32) -> Self {
         Self {
             typ,
             lexeme: lexeme.into(),
@@ -27,21 +22,7 @@ impl Token {
 
     /// Return a new EOF token with the given line number.
     pub fn new_eof(line: u32) -> Self {
-        Self::new(TokenType::Eof, "", None, line)
-    }
-
-    /// Create a new token from a slice of characters.
-    ///
-    /// This is a convenience method that converts a `&[char]` into a `String`
-    /// for the lexeme before calling [`Token::new`].
-    pub fn with_chars(
-        typ: TokenType,
-        lexeme: &[char],
-        literal: Option<Literal>,
-        line: u32,
-    ) -> Self {
-        let lexeme = lexeme.iter().collect::<String>();
-        Self::new(typ, lexeme, literal, line)
+        Self::new(TokenType::Eof, "".to_string(), None, line)
     }
 }
 
