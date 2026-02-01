@@ -29,7 +29,7 @@ fn main() {
             let mut has_error = false;
             for result in scanner.scan_tokens() {
                 match result {
-                    ScanResult::Comment => continue,
+                    ScanResult::Ignore => continue,
                     ScanResult::Result(Ok(t)) => println!("{t}"),
                     ScanResult::Result(Err(e)) => {
                         if !has_error {

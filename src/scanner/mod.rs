@@ -34,7 +34,7 @@ pub struct TokenStream<'src> {
 #[derive(Debug)]
 pub enum ScanResult {
     Result(Result<Token, Report>),
-    Comment,
+    Ignore,
 }
 
 impl ScanResult {
@@ -90,10 +90,15 @@ impl<'src> Iterator for TokenStream<'src> {
                         {
                             self.chars.next();
                         }
-                        return Some(ScanResult::Comment);
+                        return Some(ScanResult::Ignore);
                     }
                     None => self.make_token(TokenType::Slash, c),
                 },
+                ' ' | '\t' | '\r' => return Some(ScanResult::Ignore),
+                '\n' => {
+                    self.line += 1;
+                    return Some(ScanResult::Ignore);
+                }
                 _ => {
                     let report = Report::error(self.line, format!("Unexpected character: {c}"));
                     return Some(ScanResult::err(report));
@@ -168,6 +173,36 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
+    #[case(" ", vec![
+        "EOF  null",
+    ])]
+    #[case(" \t\n ", vec![
+        "EOF  null",
+    ])]
+    #[case("{\n\t}\n((\t+-\n*))", vec![
+        "LEFT_BRACE { null",
+        "RIGHT_BRACE } null",
+        "LEFT_PAREN ( null",
+        "LEFT_PAREN ( null",
+        "PLUS + null",
+        "MINUS - null",
+        "STAR * null",
+        "RIGHT_PAREN ) null",
+        "RIGHT_PAREN ) null",
+        "EOF  null",
+    ])]
+    #[case("{ \t \n\t}\n((\t\n-<<=))", vec![
+        "LEFT_BRACE { null",
+        "RIGHT_BRACE } null",
+        "LEFT_PAREN ( null",
+        "LEFT_PAREN ( null",
+        "MINUS - null",
+        "LESS < null",
+        "LESS_EQUAL <= null",
+        "RIGHT_PAREN ) null",
+        "RIGHT_PAREN ) null",
+        "EOF  null",
+    ])]
     #[case("//Comment", vec![
         "EOF  null",
     ])]
@@ -424,7 +459,7 @@ mod tests {
         let mut output = Vec::new();
         for sr in scanner.scan_tokens() {
             let s = match sr {
-                ScanResult::Comment => continue,
+                ScanResult::Ignore => continue,
                 ScanResult::Result(Ok(token)) => token.to_string(),
                 ScanResult::Result(Err(e)) => e.to_string(),
             };
