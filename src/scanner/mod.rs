@@ -59,6 +59,16 @@ impl<'src> Iterator for TokenStream<'src> {
                     Some(nc) => Token::with_chars(TokenType::BangEqual, &[c, nc], None, self.line),
                     None => Token::new(TokenType::Bang, c, None, self.line),
                 },
+                '<' => match self.next_match('=') {
+                    Some(nc) => Token::with_chars(TokenType::LessEqual, &[c, nc], None, self.line),
+                    None => Token::new(TokenType::Less, c, None, self.line),
+                },
+                '>' => match self.next_match('=') {
+                    Some(nc) => {
+                        Token::with_chars(TokenType::GreaterEqual, &[c, nc], None, self.line)
+                    }
+                    None => Token::new(TokenType::Greater, c, None, self.line),
+                },
                 _ => {
                     return Some(Err(Report::error(
                         self.line,
@@ -97,6 +107,37 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
+    #[case(">=", vec![
+        "GREATER_EQUAL >= null",
+        "EOF  null",
+    ])]
+    #[case("<<<=>>>=", vec![
+        "LESS < null",
+        "LESS < null",
+        "LESS_EQUAL <= null",
+        "GREATER > null",
+        "GREATER > null",
+        "GREATER_EQUAL >= null",
+        "EOF  null",
+    ])]
+    #[case("<=>>=>>=", vec![
+        "LESS_EQUAL <= null",
+        "GREATER > null",
+        "GREATER_EQUAL >= null",
+        "GREATER > null",
+        "GREATER_EQUAL >= null",
+        "EOF  null",
+    ])]
+    #[case("(){===!}", vec![
+        "LEFT_PAREN ( null",
+        "RIGHT_PAREN ) null",
+        "LEFT_BRACE { null",
+        "EQUAL_EQUAL == null",
+        "EQUAL = null",
+        "BANG ! null",
+        "RIGHT_BRACE } null",
+        "EOF  null",
+    ])]
     #[case("!=", vec![
         "BANG_EQUAL != null",
         "EOF  null",
