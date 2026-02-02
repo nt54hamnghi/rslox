@@ -1,0 +1,15 @@
+[
+  {
+    "label": "Build & Run",
+    "build": {
+      "command": "cargo",
+      "args": ["build"],
+    },
+    "request": "launch",
+    "program": "$ZED_WORKTREE_ROOT/target/debug/codecrafters-interpreter",
+    "args": ["tokenize", "test.lox"],
+    "adapter": "CodeLLDB",
+    // sourceLanguages is required for CodeLLDB (not GDB) when using Rust
+    "sourceLanguages": ["rust"],
+  },
+]

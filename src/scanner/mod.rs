@@ -99,6 +99,7 @@ impl<'src> Iterator for TokenStream<'src> {
                     self.line += 1;
                     return Some(ScanResult::Ignore);
                 }
+                '"' => return Some(self.string()),
                 _ => {
                     let report = Report::error(self.line, format!("Unexpected character: {c}"));
                     return Some(ScanResult::err(report));
@@ -126,6 +127,34 @@ impl<'src> TokenStream<'src> {
             return self.chars.next();
         }
         None
+    }
+
+    fn string(&mut self) -> ScanResult {
+        // prefill with the opening quote
+        let mut lexeme = String::from("\"");
+
+        while let Some(current) = self.chars.peek()
+            && *current != '"'
+        {
+            if *current == '\n' {
+                self.line += 1;
+            }
+            lexeme.push(self.chars.next().unwrap());
+        }
+
+        // reached the end of the input without finding a closing quote
+        if self.chars.peek().is_none() {
+            let report = Report::error(self.line, "Unterminated string.".into());
+            return ScanResult::err(report);
+        } else {
+            // consume the closing quote
+            lexeme.push(self.chars.next().unwrap());
+        }
+
+        let literal = Literal::from(&lexeme[1..lexeme.len() - 1]);
+        let token = self.make_literal_token(TokenType::String, lexeme, literal);
+
+        ScanResult::ok(token)
     }
 
     /// Creates a token at the current line with no literal value.
@@ -157,6 +186,7 @@ impl<'src> TokenStream<'src> {
 
     /// Creates a token with a literal value from items that can be collected into a String.
     /// Combines `make_token_from` with literal value support.
+    #[allow(unused)]
     fn make_literal_token_from<T, I>(&self, typ: TokenType, value: I, literal: Literal) -> Token
     where
         I: IntoIterator<Item = T>,
@@ -173,6 +203,30 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
+    #[case("\"hello\"", vec![
+        "STRING \"hello\" hello",
+        "EOF  null",
+    ])]
+    #[case("\"hello\" , \"unterminated", vec![
+        "STRING \"hello\" hello",
+        "COMMA , null",
+        "[line 1] Error: Unterminated string.",
+        "EOF  null",
+    ])]
+    #[case("\"foo \tbar 123 // hello world!\"", vec![
+        "STRING \"foo \tbar 123 // hello world!\" foo \tbar 123 // hello world!",
+        "EOF  null",
+    ])]
+    #[case("(\"baz\"+\"bar\") != \"other_string\"", vec![
+        "LEFT_PAREN ( null",
+        "STRING \"baz\" baz",
+        "PLUS + null",
+        "STRING \"bar\" bar",
+        "RIGHT_PAREN ) null",
+        "BANG_EQUAL != null",
+        "STRING \"other_string\" other_string",
+        "EOF  null",
+    ])]
     #[case(" ", vec![
         "EOF  null",
     ])]

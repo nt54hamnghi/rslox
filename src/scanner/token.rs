@@ -52,6 +52,18 @@ impl Display for Literal {
     }
 }
 
+impl From<&str> for Literal {
+    fn from(s: &str) -> Self {
+        Literal::String(s.to_owned())
+    }
+}
+
+impl From<f64> for Literal {
+    fn from(n: f64) -> Self {
+        Literal::Number(n)
+    }
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum TokenType {
     // Single-character tokens.
