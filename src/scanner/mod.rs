@@ -20,14 +20,20 @@ impl<'src> Scanner<'src> {
         TokenStream {
             line: 1,
             chars: self.source.chars().peekable(),
+            lead: None,
             at_end: false,
         }
     }
 }
 
 pub struct TokenStream<'src> {
+    /// The character iterator for the source code being scanned
     chars: Peekable<Chars<'src>>,
+    /// The leading character for multi-character tokens
+    lead: Option<char>,
+    /// The current line number in the source code
     line: u32,
+    /// Whether the end of the token stream has been reached
     at_end: bool,
 }
 
@@ -85,10 +91,10 @@ impl<'src> Iterator for TokenStream<'src> {
                 },
                 '/' => match self.next_match('/') {
                     Some(_) => {
-                        while let Some(current) = self.chars.peek()
-                            && *current != '\n'
-                        {
-                            self.chars.next();
+                        loop {
+                            let Some(_) = self.chars.next_if(|c| *c != '\n') else {
+                                break;
+                            };
                         }
                         return Some(ScanResult::Ignore);
                     }
@@ -99,7 +105,14 @@ impl<'src> Iterator for TokenStream<'src> {
                     self.line += 1;
                     return Some(ScanResult::Ignore);
                 }
-                '"' => return Some(self.string()),
+                '"' => {
+                    self.lead = Some(c);
+                    return Some(self.string());
+                }
+                '0'..='9' => {
+                    self.lead = Some(c);
+                    return Some(self.number());
+                }
                 _ => {
                     let report = Report::error(self.line, format!("Unexpected character: {c}"));
                     return Some(ScanResult::err(report));
@@ -116,30 +129,58 @@ impl<'src> Iterator for TokenStream<'src> {
 }
 
 impl<'src> TokenStream<'src> {
-    /// Attempts to consume the next character if it matches the expected character.
-    ///
-    /// This method peeks at the next character in the iterator. If it matches the `expected`
-    /// character, the character is consumed and returned. Otherwise, `None` is returned and
-    /// the iterator position remains unchanged.
+    /// Consume and return the next item if it is equal to expected.
     fn next_match(&mut self, expected: char) -> Option<char> {
-        let value = self.chars.peek()?;
-        if *value == expected {
-            return self.chars.next();
-        }
-        None
+        self.chars.next_if_eq(&expected)
     }
 
+    /// Peeks at the character after the next one in the stream without consuming any characters.
+    /// This method looks ahead two positions in the character stream.
+    fn peek_next(&self) -> Option<char> {
+        let mut cloned = self.chars.clone();
+        cloned.next()?;
+        return cloned.peek().cloned();
+    }
+
+    /// Scan a numeric token
+    fn number(&mut self) -> ScanResult {
+        // prefill with the opening quote
+        let lead = self.lead.take().expect("Expected a leading digit");
+        let mut lexeme = String::from(lead);
+
+        while let Some(current) = self.chars.next_if(char::is_ascii_digit) {
+            lexeme.push(current);
+        }
+
+        if let Some('.') = self.chars.peek()
+            && let Some(n) = self.peek_next()
+            && n.is_ascii_digit()
+        {
+            lexeme.push(self.chars.next().unwrap());
+            while let Some(current) = self.chars.next_if(char::is_ascii_digit) {
+                lexeme.push(current);
+            }
+        };
+
+        let number = lexeme
+            .parse::<f64>()
+            .expect("Expected a valid double-precision float");
+        let token = self.make_literal_token(TokenType::Number, lexeme, number.into());
+
+        ScanResult::ok(token)
+    }
+
+    /// Scan a string token
     fn string(&mut self) -> ScanResult {
         // prefill with the opening quote
-        let mut lexeme = String::from("\"");
+        let lead = self.lead.take().expect("Expected an opening quote");
+        let mut lexeme = String::from(lead);
 
-        while let Some(current) = self.chars.peek()
-            && *current != '"'
-        {
-            if *current == '\n' {
+        while let Some(current) = self.chars.next_if(|c| *c != '"') {
+            if current == '\n' {
                 self.line += 1;
             }
-            lexeme.push(self.chars.next().unwrap());
+            lexeme.push(current);
         }
 
         // reached the end of the input without finding a closing quote
@@ -148,6 +189,7 @@ impl<'src> TokenStream<'src> {
             return ScanResult::err(report);
         } else {
             // consume the closing quote
+            // unwrap is safe since peek returned Some(_)
             lexeme.push(self.chars.next().unwrap());
         }
 
@@ -203,6 +245,40 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
+    #[case("44", vec![
+        "NUMBER 44 44.0",
+        "EOF  null",
+    ])]
+    #[case("2438.6541", vec![
+        "NUMBER 2438.6541 2438.6541",
+        "EOF  null",
+    ])]
+    #[case("19.0000", vec![
+        "NUMBER 19.0000 19.0",
+        "EOF  null",
+    ])]
+    #[case("(42+77) > 98 != (\"Success\" != \"Failure\") != (46 >= 83)", vec![
+        "LEFT_PAREN ( null",
+        "NUMBER 42 42.0",
+        "PLUS + null",
+        "NUMBER 77 77.0",
+        "RIGHT_PAREN ) null",
+        "GREATER > null",
+        "NUMBER 98 98.0",
+        "BANG_EQUAL != null",
+        "LEFT_PAREN ( null",
+        "STRING \"Success\" Success",
+        "BANG_EQUAL != null",
+        "STRING \"Failure\" Failure",
+        "RIGHT_PAREN ) null",
+        "BANG_EQUAL != null",
+        "LEFT_PAREN ( null",
+        "NUMBER 46 46.0",
+        "GREATER_EQUAL >= null",
+        "NUMBER 83 83.0",
+        "RIGHT_PAREN ) null",
+        "EOF  null",
+    ])]
     #[case("\"hello\"", vec![
         "STRING \"hello\" hello",
         "EOF  null",

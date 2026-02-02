@@ -42,11 +42,16 @@ pub enum Literal {
     Number(f64),
     String(String),
 }
-
 impl Display for Literal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Literal::Number(n) => Display::fmt(n, f),
+            Literal::Number(n) => {
+                if n.fract() == 0.0 {
+                    write!(f, "{:.1}", n)
+                } else {
+                    write!(f, "{}", n)
+                }
+            }
             Literal::String(s) => Display::fmt(s, f),
         }
     }
