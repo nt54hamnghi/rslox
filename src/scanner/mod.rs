@@ -113,6 +113,10 @@ impl<'src> Iterator for TokenStream<'src> {
                     self.lead = Some(c);
                     return Some(self.number());
                 }
+                '_' | 'a'..='z' | 'A'..='Z' => {
+                    self.lead = Some(c);
+                    return Some(self.identifier());
+                }
                 _ => {
                     let report = Report::error(self.line, format!("Unexpected character: {c}"));
                     return Some(ScanResult::err(report));
@@ -142,9 +146,24 @@ impl<'src> TokenStream<'src> {
         return cloned.peek().cloned();
     }
 
-    /// Scan a numeric token
+    /// Scan an identifier
+    fn identifier(&mut self) -> ScanResult {
+        let lead = self.lead.take().expect("Expected a leading character");
+        let mut lexeme = String::from(lead);
+
+        while let Some(current) = self
+            .chars
+            .next_if(|c| *c == '_' || c.is_ascii_alphanumeric())
+        {
+            lexeme.push(current);
+        }
+
+        let token = self.make_token(TokenType::Identifier, lexeme);
+        ScanResult::ok(token)
+    }
+
+    /// Scan a number token
     fn number(&mut self) -> ScanResult {
-        // prefill with the opening quote
         let lead = self.lead.take().expect("Expected a leading digit");
         let mut lexeme = String::from(lead);
 
@@ -156,8 +175,9 @@ impl<'src> TokenStream<'src> {
             && let Some(n) = self.peek_next()
             && n.is_ascii_digit()
         {
+            // unwrap is safe since peek returned Some('.')
             lexeme.push(self.chars.next().unwrap());
-            while let Some(current) = self.chars.next_if(char::is_ascii_digit) {
+            while let Some(current) = self.chars.next_if(char::is_ascii_alphanumeric) {
                 lexeme.push(current);
             }
         };
@@ -172,7 +192,6 @@ impl<'src> TokenStream<'src> {
 
     /// Scan a string token
     fn string(&mut self) -> ScanResult {
-        // prefill with the opening quote
         let lead = self.lead.take().expect("Expected an opening quote");
         let mut lexeme = String::from(lead);
 
@@ -245,6 +264,63 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
+    #[case("baz bar", vec![
+        "IDENTIFIER baz null",
+        "IDENTIFIER bar null",
+        "EOF  null",
+    ])]
+    #[case("_123baz f00 6ar foo bar", vec![
+        "IDENTIFIER _123baz null",
+        "IDENTIFIER f00 null",
+        "NUMBER 6 6.0",
+        "IDENTIFIER ar null",
+        "IDENTIFIER foo null",
+        "IDENTIFIER bar null",
+        "EOF  null",
+    ])]
+    #[case("message = \"Hello, World!\"\nnumber = 123", vec![
+        "IDENTIFIER message null",
+        "EQUAL = null",
+        "STRING \"Hello, World!\" Hello, World!",
+        "IDENTIFIER number null",
+        "EQUAL = null",
+        "NUMBER 123 123.0",
+        "EOF  null",
+    ])]
+    #[case("{\n// This is a complex test case\nstr1 = \"Test\"\nstr2 = \"Case\"\nnum1 = 100\nnum2 = 200.00\nresult = (str1 == str2) != ((num1 + num2) >= 300)\n}", vec![
+        "LEFT_BRACE { null",
+        "IDENTIFIER str1 null",
+        "EQUAL = null",
+        "STRING \"Test\" Test",
+        "IDENTIFIER str2 null",
+        "EQUAL = null",
+        "STRING \"Case\" Case",
+        "IDENTIFIER num1 null",
+        "EQUAL = null",
+        "NUMBER 100 100.0",
+        "IDENTIFIER num2 null",
+        "EQUAL = null",
+        "NUMBER 200.00 200.0",
+        "IDENTIFIER result null",
+        "EQUAL = null",
+        "LEFT_PAREN ( null",
+        "IDENTIFIER str1 null",
+        "EQUAL_EQUAL == null",
+        "IDENTIFIER str2 null",
+        "RIGHT_PAREN ) null",
+        "BANG_EQUAL != null",
+        "LEFT_PAREN ( null",
+        "LEFT_PAREN ( null",
+        "IDENTIFIER num1 null",
+        "PLUS + null",
+        "IDENTIFIER num2 null",
+        "RIGHT_PAREN ) null",
+        "GREATER_EQUAL >= null",
+        "NUMBER 300 300.0",
+        "RIGHT_PAREN ) null",
+        "RIGHT_BRACE } null",
+        "EOF  null",
+    ])]
     #[case("44", vec![
         "NUMBER 44 44.0",
         "EOF  null",
