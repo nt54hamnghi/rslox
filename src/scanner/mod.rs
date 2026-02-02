@@ -1,10 +1,33 @@
+use std::collections::HashMap;
 use std::iter::Peekable;
 use std::str::Chars;
+use std::sync::LazyLock;
 
 use crate::error::Report;
 use crate::scanner::token::{Literal, Token, TokenType};
 
 pub mod token;
+
+pub static KEYWORDS: LazyLock<HashMap<&str, TokenType>> = LazyLock::new(|| {
+    HashMap::from([
+        ("and", TokenType::And),
+        ("class", TokenType::Class),
+        ("else", TokenType::Else),
+        ("false", TokenType::False),
+        ("for", TokenType::For),
+        ("fun", TokenType::Fun),
+        ("if", TokenType::If),
+        ("nil", TokenType::Nil),
+        ("or", TokenType::Or),
+        ("print", TokenType::Print),
+        ("return", TokenType::Return),
+        ("super", TokenType::Super),
+        ("this", TokenType::This),
+        ("true", TokenType::True),
+        ("var", TokenType::Var),
+        ("while", TokenType::While),
+    ])
+});
 
 pub struct Scanner<'src> {
     // Raw source code
@@ -158,7 +181,12 @@ impl<'src> TokenStream<'src> {
             lexeme.push(current);
         }
 
-        let token = self.make_token(TokenType::Identifier, lexeme);
+        let typ = KEYWORDS
+            .get(lexeme.as_str())
+            .cloned()
+            .unwrap_or(TokenType::Identifier);
+        let token = self.make_token(typ, lexeme);
+
         ScanResult::ok(token)
     }
 
@@ -264,6 +292,113 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
+    #[case("return", vec![
+        "RETURN return null",
+        "EOF  null",
+    ])]
+    #[case("AND FOR SUPER while this true FUN false THIS and NIL FALSE or else nil if print WHILE fun class RETURN IF return OR super TRUE ELSE for CLASS PRINT var VAR", vec![
+        "IDENTIFIER AND null",
+        "IDENTIFIER FOR null",
+        "IDENTIFIER SUPER null",
+        "WHILE while null",
+        "THIS this null",
+        "TRUE true null",
+        "IDENTIFIER FUN null",
+        "FALSE false null",
+        "IDENTIFIER THIS null",
+        "AND and null",
+        "IDENTIFIER NIL null",
+        "IDENTIFIER FALSE null",
+        "OR or null",
+        "ELSE else null",
+        "NIL nil null",
+        "IF if null",
+        "PRINT print null",
+        "IDENTIFIER WHILE null",
+        "FUN fun null",
+        "CLASS class null",
+        "IDENTIFIER RETURN null",
+        "IDENTIFIER IF null",
+        "RETURN return null",
+        "IDENTIFIER OR null",
+        "SUPER super null",
+        "IDENTIFIER TRUE null",
+        "IDENTIFIER ELSE null",
+        "FOR for null",
+        "IDENTIFIER CLASS null",
+        "IDENTIFIER PRINT null",
+        "VAR var null",
+        "IDENTIFIER VAR null",
+        "EOF  null",
+    ])]
+    #[case("var greeting = \"Hello\"\nif (greeting == \"Hello\") {\n    return true\n} else {\n    return false\n}", vec![
+        "VAR var null",
+        "IDENTIFIER greeting null",
+        "EQUAL = null",
+        "STRING \"Hello\" Hello",
+        "IF if null",
+        "LEFT_PAREN ( null",
+        "IDENTIFIER greeting null",
+        "EQUAL_EQUAL == null",
+        "STRING \"Hello\" Hello",
+        "RIGHT_PAREN ) null",
+        "LEFT_BRACE { null",
+        "RETURN return null",
+        "TRUE true null",
+        "RIGHT_BRACE } null",
+        "ELSE else null",
+        "LEFT_BRACE { null",
+        "RETURN return null",
+        "FALSE false null",
+        "RIGHT_BRACE } null",
+        "EOF  null",
+    ])]
+    #[case("var result = (a + b) > 7 or \"Success\" != \"Failure\" or x >= 5\nwhile (result) {\n    var counter = 0\n    counter = counter + 1\n    if (counter == 10) {\n        return nil\n    }\n}", vec![
+        "VAR var null",
+        "IDENTIFIER result null",
+        "EQUAL = null",
+        "LEFT_PAREN ( null",
+        "IDENTIFIER a null",
+        "PLUS + null",
+        "IDENTIFIER b null",
+        "RIGHT_PAREN ) null",
+        "GREATER > null",
+        "NUMBER 7 7.0",
+        "OR or null",
+        "STRING \"Success\" Success",
+        "BANG_EQUAL != null",
+        "STRING \"Failure\" Failure",
+        "OR or null",
+        "IDENTIFIER x null",
+        "GREATER_EQUAL >= null",
+        "NUMBER 5 5.0",
+        "WHILE while null",
+        "LEFT_PAREN ( null",
+        "IDENTIFIER result null",
+        "RIGHT_PAREN ) null",
+        "LEFT_BRACE { null",
+        "VAR var null",
+        "IDENTIFIER counter null",
+        "EQUAL = null",
+        "NUMBER 0 0.0",
+        "IDENTIFIER counter null",
+        "EQUAL = null",
+        "IDENTIFIER counter null",
+        "PLUS + null",
+        "NUMBER 1 1.0",
+        "IF if null",
+        "LEFT_PAREN ( null",
+        "IDENTIFIER counter null",
+        "EQUAL_EQUAL == null",
+        "NUMBER 10 10.0",
+        "RIGHT_PAREN ) null",
+        "LEFT_BRACE { null",
+        "RETURN return null",
+        "NIL nil null",
+        "RIGHT_BRACE } null",
+        "RIGHT_BRACE } null",
+        "EOF  null",
+    ])]
     #[case("baz bar", vec![
         "IDENTIFIER baz null",
         "IDENTIFIER bar null",
