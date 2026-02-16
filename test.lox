@@ -1,2 +1,1 @@
-1 + 2 / 3 // hello
-var test = 1
+(1 + 2) / 3 - nil // hello

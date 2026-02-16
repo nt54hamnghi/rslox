@@ -2,8 +2,10 @@
 use std::fs;
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::Parser as _;
 use codecrafters_interpreter::cli;
+use codecrafters_interpreter::parser::Parser;
+use codecrafters_interpreter::parser::printer::AstPrinter;
 use codecrafters_interpreter::scanner::ScanResult;
 use codecrafters_interpreter::scanner::Scanner;
 use codecrafters_interpreter::scanner::token::Token;
@@ -31,7 +33,12 @@ fn parse(filename: PathBuf) {
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
 
-    println!("{tokens:#?}");
+    // println!("{tokens:#?}");
+
+    let mut parser = Parser::from(tokens);
+    let expr = parser.parse();
+    let expr_str = AstPrinter.print(expr);
+    println!("{expr_str}");
 }
 
 fn tokenize(filename: PathBuf) {
