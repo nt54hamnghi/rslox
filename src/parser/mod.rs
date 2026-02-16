@@ -156,3 +156,29 @@ impl Parser {
         self.tokens.peek().is_none_or(|t| t.typ == Eof)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::printer::AstPrinter;
+    use crate::scanner::{ScanResult, Scanner};
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("true", "true")]
+    #[case("false", "false")]
+    #[case("nil", "nil")]
+    fn test_parser(#[case] input: &str, #[case] expected_output: &str) {
+        let tokens = Scanner::new(&input)
+            .scan_tokens()
+            .filter_map(|s| match s {
+                ScanResult::Result(token) => token.ok(),
+                ScanResult::Ignore => None,
+            })
+            .collect::<Vec<_>>();
+
+        let mut parser = Parser::from(tokens);
+        let expr_str = AstPrinter.print(parser.parse());
+        assert_eq!(expected_output, expr_str)
+    }
+}
