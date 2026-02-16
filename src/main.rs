@@ -8,7 +8,6 @@ use codecrafters_interpreter::parser::Parser;
 use codecrafters_interpreter::parser::printer::AstPrinter;
 use codecrafters_interpreter::scanner::ScanResult;
 use codecrafters_interpreter::scanner::Scanner;
-use codecrafters_interpreter::scanner::token::Token;
 
 fn main() {
     let args = cli::Args::parse();
@@ -20,42 +19,52 @@ fn main() {
 }
 
 fn parse(filename: PathBuf) {
-    let Some(content) = read_file(filename) else {
-        return;
-    };
+    let content = read_file(filename);
 
-    let tokens = Scanner::new(&content)
-        .scan_tokens()
-        .filter_map(|s| match s {
-            ScanResult::Result(token) => Some(token),
-            ScanResult::Ignore => None,
-        })
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+    let mut has_error = false;
+    let mut tokens = Vec::new();
 
-    // println!("{tokens:#?}");
+    let scanner = Scanner::new(&content);
+    for result in scanner.scan_tokens() {
+        match result {
+            ScanResult::Ignore => continue,
+            ScanResult::Result(Ok(tkn)) => tokens.push(tkn),
+            ScanResult::Result(Err(err)) => {
+                has_error = true;
+                eprintln!("{err}");
+            }
+        }
+    }
+
+    if has_error {
+        std::process::exit(65);
+    }
 
     let mut parser = Parser::from(tokens);
-    let expr = parser.parse();
-    let expr_str = AstPrinter.print(expr);
-    println!("{expr_str}");
+    match parser.parse() {
+        Ok(expr) => {
+            let expr_str = AstPrinter.print(expr);
+            println!("{expr_str}");
+        }
+        Err(err) => {
+            eprintln!("{err}");
+            std::process::exit(65);
+        }
+    };
 }
 
 fn tokenize(filename: PathBuf) {
-    let Some(content) = read_file(filename) else {
-        return;
-    };
+    let content = read_file(filename);
+
+    let mut has_error = false;
 
     let scanner = Scanner::new(&content);
-    let mut has_error = false;
     for result in scanner.scan_tokens() {
         match result {
             ScanResult::Ignore => continue,
             ScanResult::Result(Ok(t)) => println!("{t}"),
             ScanResult::Result(Err(e)) => {
-                if !has_error {
-                    has_error = true;
-                }
+                has_error = true;
                 eprintln!("{e}");
             }
         }
@@ -63,16 +72,13 @@ fn tokenize(filename: PathBuf) {
 
     if has_error {
         std::process::exit(65);
-    } else {
-        std::process::exit(0);
     }
 }
 
-fn read_file(filename: PathBuf) -> Option<String> {
+fn read_file(filename: PathBuf) -> String {
     let Ok(file_contents) = fs::read_to_string(&filename) else {
         eprintln!("Failed to read file {}", filename.display());
-        println!("{}", Token::new_eof(0));
-        return None;
+        std::process::exit(1);
     };
-    Some(file_contents)
+    file_contents
 }

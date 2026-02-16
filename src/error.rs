@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use crate::scanner::token::{Token, TokenType};
+
 #[derive(Debug, thiserror::Error)]
 pub struct Report {
     line: u32,
@@ -8,10 +10,24 @@ pub struct Report {
 }
 
 impl Report {
-    pub fn error(line: u32, message: String) -> Self {
+    pub fn error_at_line(line: u32, message: String) -> Self {
         Self {
             line,
             location: None,
+            message,
+        }
+    }
+
+    pub fn error_at_token(token: &Token, message: String) -> Self {
+        let location = if token.typ == TokenType::Eof {
+            " at end".into()
+        } else {
+            format!(" at '{}'", token.lexeme)
+        };
+
+        Self {
+            line: token.line,
+            location: Some(location),
             message,
         }
     }

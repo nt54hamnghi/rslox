@@ -141,7 +141,8 @@ impl<'src> Iterator for TokenStream<'src> {
                     return Some(self.identifier());
                 }
                 _ => {
-                    let report = Report::error(self.line, format!("Unexpected character: {c}"));
+                    let report =
+                        Report::error_at_line(self.line, format!("Unexpected character: {c}"));
                     return Some(ScanResult::err(report));
                 }
             },
@@ -232,7 +233,7 @@ impl<'src> TokenStream<'src> {
 
         // reached the end of the input without finding a closing quote
         if self.chars.peek().is_none() {
-            let report = Report::error(self.line, "Unterminated string.".into());
+            let report = Report::error_at_line(self.line, "Unterminated string.".into());
             return ScanResult::err(report);
         } else {
             // consume the closing quote

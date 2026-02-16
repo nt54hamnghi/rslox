@@ -1,10 +1,11 @@
 use std::iter::Peekable;
 use std::vec;
 
+use crate::error::Report;
 use crate::parser::expr::{Ast, Literal};
 use crate::scanner::token::TokenType::{
     Bang, BangEqual, Eof, EqualEqual, False, Greater, GreaterEqual, LeftParen, Less, LessEqual,
-    Minus, Nil, Number, Plus, RightParen, Slash, Star, String, True,
+    Minus, Nil, Number, Plus, RightParen, Slash, Star, String as Str, True,
 };
 use crate::scanner::token::{Token, TokenType};
 
@@ -24,100 +25,99 @@ impl From<Vec<Token>> for Parser {
 }
 
 impl Parser {
-    pub fn parse(&mut self) -> Ast {
+    pub fn parse(&mut self) -> Result<Ast, Report> {
         self.expression()
     }
 
     /// expression → equality ;
-    fn expression(&mut self) -> Ast {
+    fn expression(&mut self) -> Result<Ast, Report> {
         self.equality()
     }
 
     /// equality → comparison ( ( "!=" | "==" ) comparison )* ;
-    fn equality(&mut self) -> Ast {
-        let mut expr = self.comparison();
+    fn equality(&mut self) -> Result<Ast, Report> {
+        let mut expr = self.comparison()?;
 
         while let Some(operator) = self.next_match(&[BangEqual, EqualEqual]) {
-            let right = self.comparison();
+            let right = self.comparison()?;
             expr = Ast::binary(expr, operator, right);
         }
 
-        expr
+        Ok(expr)
     }
 
     /// comparison → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
-    fn comparison(&mut self) -> Ast {
-        let mut expr = self.term();
+    fn comparison(&mut self) -> Result<Ast, Report> {
+        let mut expr = self.term()?;
 
         while let Some(operator) = self.next_match(&[Greater, GreaterEqual, Less, LessEqual]) {
-            let right = self.term();
+            let right = self.term()?;
             expr = Ast::binary(expr, operator, right);
         }
 
-        expr
+        Ok(expr)
     }
 
     /// term → factor ( ( "-" | "+" ) factor )* ;
-    fn term(&mut self) -> Ast {
-        let mut expr = self.factor();
+    fn term(&mut self) -> Result<Ast, Report> {
+        let mut expr = self.factor()?;
 
         while let Some(operator) = self.next_match(&[Minus, Plus]) {
-            let right = self.factor();
+            let right = self.factor()?;
             expr = Ast::binary(expr, operator, right);
         }
 
-        expr
+        Ok(expr)
     }
 
     /// factor → unary ( ( "/" | "*" ) unary )* ;
-    fn factor(&mut self) -> Ast {
-        let mut expr = self.unary();
+    fn factor(&mut self) -> Result<Ast, Report> {
+        let mut expr = self.unary()?;
 
         while let Some(operator) = self.next_match(&[Slash, Star]) {
-            let right = self.unary();
+            let right = self.unary()?;
             expr = Ast::binary(expr, operator, right);
         }
 
-        expr
+        Ok(expr)
     }
 
     /// unary → ( "!" | "-" ) unary | primary ;
-    fn unary(&mut self) -> Ast {
+    fn unary(&mut self) -> Result<Ast, Report> {
         if let Some(operator) = self.next_match(&[Bang, Minus]) {
-            let right = self.unary();
-            return Ast::unary(operator, right);
+            let right = self.unary()?;
+            return Ok(Ast::unary(operator, right));
         }
 
         self.primary()
     }
 
     /// primary → NUMBER | STRING | "true" | "false" | "nil"| "(" expression ")" ;
-    fn primary(&mut self) -> Ast {
+    fn primary(&mut self) -> Result<Ast, Report> {
         if self.next_if(True).is_some() {
-            return Ast::literal(Literal::from(true));
+            return Ok(Ast::literal(Literal::from(true)));
         }
 
         if self.next_if(False).is_some() {
-            return Ast::literal(Literal::from(false));
+            return Ok(Ast::literal(Literal::from(false)));
         }
 
         if self.next_if(Nil).is_some() {
-            return Ast::literal(Literal::Nil);
+            return Ok(Ast::literal(Literal::Nil));
         }
 
-        if let Some(token) = self.next_match(&[Number, String]) {
+        if let Some(token) = self.next_match(&[Number, Str]) {
             let value = token.literal.expect("literal value for token");
-            return Ast::literal(value.into());
+            return Ok(Ast::literal(value.into()));
         }
 
         if self.next_if(LeftParen).is_some() {
-            let expr = self.expression();
-            self.next_if(RightParen)
-                .expect("expected ')' after expression");
-            return Ast::grouping(expr);
+            let expr = self.expression()?;
+            self.next_ok(RightParen, "Expect ')' after expression".into())?;
+            return Ok(Ast::grouping(expr));
         }
 
-        panic!("expected expression")
+        Err(self.error("Expect expression".into()))
     }
 
     /// Consumes the next token if it matches any of the given types.
@@ -148,12 +148,26 @@ impl Parser {
         self.tokens.next_if(|token| token.typ == tt)
     }
 
+    /// Consumes the next token if it matches the given type, or returns an error.
+    ///
+    /// Returns:
+    /// - `Ok(Token)` if the next token matches the given type, consuming it.
+    /// - `Err(Report)` if the next token doesn't match or if at end of tokens.
+    fn next_ok(&mut self, tt: TokenType, message: String) -> Result<Token, Report> {
+        self.next_if(tt).ok_or(self.error(message))
+    }
+
     /// Checks if the parser has reached the end of the token stream.
     ///
     /// Returns `true` if the current token is an EOF token or
     /// there are no more tokens in the token list.
     fn is_at_end(&mut self) -> bool {
         self.tokens.peek().is_none_or(|t| t.typ == Eof)
+    }
+
+    fn error(&mut self, message: String) -> Report {
+        let token = self.tokens.peek().expect("expected a token");
+        Report::error_at_token(token, message)
     }
 }
 
@@ -217,7 +231,8 @@ mod tests {
             .collect::<Vec<_>>();
 
         let mut parser = Parser::from(tokens);
-        let expr_str = AstPrinter.print(parser.parse());
+        let expr = parser.parse().unwrap();
+        let expr_str = AstPrinter.print(expr);
         assert_eq!(expected_output, expr_str)
     }
 }
