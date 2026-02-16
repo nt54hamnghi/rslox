@@ -15,8 +15,8 @@ test-local:
 alias tl := test-local
 
 # test remotely with codecrafters
-test-remote:
-    @codecrafters test
+test-remote *args:
+    @codecrafters test {{ args }}
 
 alias tr := test-remote
 
