@@ -5,13 +5,13 @@ use std::fmt::Display;
 pub struct Token {
     pub typ: TokenType,
     pub lexeme: String,
-    pub literal: Option<Literal>,
+    pub literal: Option<Value>,
     #[allow(unused)]
     line: u32,
 }
 
 impl Token {
-    pub fn new(typ: TokenType, lexeme: String, literal: Option<Literal>, line: u32) -> Self {
+    pub fn new(typ: TokenType, lexeme: String, literal: Option<Value>, line: u32) -> Self {
         Self {
             typ,
             lexeme: lexeme.into(),
@@ -38,35 +38,35 @@ impl Display for Token {
 }
 
 #[derive(Debug)]
-pub enum Literal {
+pub enum Value {
     Number(f64),
     String(String),
 }
 
-impl Display for Literal {
+impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Literal::Number(n) => {
+            Value::Number(n) => {
                 if n.fract() == 0.0 {
                     write!(f, "{:.1}", n)
                 } else {
                     write!(f, "{}", n)
                 }
             }
-            Literal::String(s) => Display::fmt(s, f),
+            Value::String(s) => Display::fmt(s, f),
         }
     }
 }
 
-impl From<&str> for Literal {
+impl From<&str> for Value {
     fn from(s: &str) -> Self {
-        Literal::String(s.to_owned())
+        Value::String(s.to_owned())
     }
 }
 
-impl From<f64> for Literal {
+impl From<f64> for Value {
     fn from(n: f64) -> Self {
-        Literal::Number(n)
+        Value::Number(n)
     }
 }
 

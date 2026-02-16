@@ -4,7 +4,7 @@ use std::str::Chars;
 use std::sync::LazyLock;
 
 use crate::error::Report;
-use crate::scanner::token::{Literal, Token, TokenType};
+use crate::scanner::token::{Token, TokenType, Value};
 
 pub mod token;
 
@@ -240,7 +240,7 @@ impl<'src> TokenStream<'src> {
             lexeme.push(self.chars.next().unwrap());
         }
 
-        let literal = Literal::from(&lexeme[1..lexeme.len() - 1]);
+        let literal = Value::from(&lexeme[1..lexeme.len() - 1]);
         let token = self.make_literal_token(TokenType::String, lexeme, literal);
 
         ScanResult::ok(token)
@@ -268,21 +268,9 @@ impl<'src> TokenStream<'src> {
         &self,
         typ: TokenType,
         lexeme: impl Into<String>,
-        literal: Literal,
+        literal: Value,
     ) -> Token {
         Token::new(typ, lexeme.into(), Some(literal), self.line)
-    }
-
-    /// Creates a token with a literal value from items that can be collected into a String.
-    /// Combines `make_token_from` with literal value support.
-    #[allow(unused)]
-    fn make_literal_token_from<T, I>(&self, typ: TokenType, value: I, literal: Literal) -> Token
-    where
-        I: IntoIterator<Item = T>,
-        String: FromIterator<T>,
-    {
-        let lexeme = value.into_iter().collect::<String>();
-        self.make_literal_token(typ, lexeme, literal)
     }
 }
 
