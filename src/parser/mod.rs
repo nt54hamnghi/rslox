@@ -165,6 +165,9 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
+    #[case("57", "57.0")]
+    #[case("0.0", "0.0")]
+    #[case("86.63", "86.63")]
     #[case("true", "true")]
     #[case("false", "false")]
     #[case("nil", "nil")]

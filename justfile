@@ -22,8 +22,9 @@ alias tr := test-remote
 
 # submit to codecrafters
 submit message:
-    @git add .
-    @git commit --allow-empty -m "{{ message }}"
-    @git push origin master
+    @jj describe --message "{{ message }}"
+    @jj bookmark move master
+    @jj git push --bookmark master --remote me
+    @jj git push --bookmark master --remote origin
 
 alias s := submit
