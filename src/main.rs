@@ -1,5 +1,6 @@
 #![allow(unused_variables)]
 use std::fs;
+use std::path::PathBuf;
 
 use clap::Parser;
 use codecrafters_interpreter::cli;
@@ -12,18 +13,33 @@ fn main() {
 
     match args.subcommand {
         cli::Command::Tokenize { filename } => tokenize(filename),
-        cli::Command::Parse { filename } => todo!(),
+        cli::Command::Parse { filename } => parse(filename),
     }
 }
 
-fn tokenize(filename: std::path::PathBuf) {
-    let Ok(file_contents) = fs::read_to_string(&filename) else {
-        eprintln!("Failed to read file {}", filename.display());
-        println!("{}", Token::new_eof(0));
+fn parse(filename: PathBuf) {
+    let Some(content) = read_file(filename) else {
         return;
     };
 
-    let scanner = Scanner::new(&file_contents);
+    let tokens = Scanner::new(&content)
+        .scan_tokens()
+        .filter_map(|s| match s {
+            ScanResult::Result(token) => Some(token),
+            ScanResult::Ignore => None,
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+    println!("{tokens:#?}");
+}
+
+fn tokenize(filename: PathBuf) {
+    let Some(content) = read_file(filename) else {
+        return;
+    };
+
+    let scanner = Scanner::new(&content);
     let mut has_error = false;
     for result in scanner.scan_tokens() {
         match result {
@@ -43,4 +59,13 @@ fn tokenize(filename: std::path::PathBuf) {
     } else {
         std::process::exit(0);
     }
+}
+
+fn read_file(filename: PathBuf) -> Option<String> {
+    let Ok(file_contents) = fs::read_to_string(&filename) else {
+        eprintln!("Failed to read file {}", filename.display());
+        println!("{}", Token::new_eof(0));
+        return None;
+    };
+    Some(file_contents)
 }

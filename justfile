@@ -4,7 +4,7 @@ default:
 
 # run a lox program
 run path="test.lox":
-    @./your_program.sh tokenize {{ path }}
+    @./your_program.sh parse {{ path }}
 
 alias r := run
 
