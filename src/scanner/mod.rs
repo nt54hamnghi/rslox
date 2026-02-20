@@ -1,33 +1,10 @@
-use std::collections::HashMap;
 use std::iter::Peekable;
 use std::str::Chars;
-use std::sync::LazyLock;
 
 use crate::error::Report;
 use crate::scanner::token::{Token, TokenType, Value};
 
 pub mod token;
-
-pub static KEYWORDS: LazyLock<HashMap<&str, TokenType>> = LazyLock::new(|| {
-    HashMap::from([
-        ("and", TokenType::And),
-        ("class", TokenType::Class),
-        ("else", TokenType::Else),
-        ("false", TokenType::False),
-        ("for", TokenType::For),
-        ("fun", TokenType::Fun),
-        ("if", TokenType::If),
-        ("nil", TokenType::Nil),
-        ("or", TokenType::Or),
-        ("print", TokenType::Print),
-        ("return", TokenType::Return),
-        ("super", TokenType::Super),
-        ("this", TokenType::This),
-        ("true", TokenType::True),
-        ("var", TokenType::Var),
-        ("while", TokenType::While),
-    ])
-});
 
 pub struct Scanner<'src> {
     // Raw source code
@@ -182,10 +159,26 @@ impl<'src> TokenStream<'src> {
             lexeme.push(current);
         }
 
-        let typ = KEYWORDS
-            .get(lexeme.as_str())
-            .cloned()
-            .unwrap_or(TokenType::Identifier);
+        let typ = match lexeme.as_str() {
+            "and" => TokenType::And,
+            "class" => TokenType::Class,
+            "else" => TokenType::Else,
+            "false" => TokenType::False,
+            "for" => TokenType::For,
+            "fun" => TokenType::Fun,
+            "if" => TokenType::If,
+            "nil" => TokenType::Nil,
+            "or" => TokenType::Or,
+            "print" => TokenType::Print,
+            "return" => TokenType::Return,
+            "super" => TokenType::Super,
+            "this" => TokenType::This,
+            "true" => TokenType::True,
+            "var" => TokenType::Var,
+            "while" => TokenType::While,
+            _ => TokenType::Identifier,
+        };
+
         let token = self.make_token(typ, lexeme);
 
         ScanResult::ok(token)
