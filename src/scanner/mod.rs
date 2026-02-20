@@ -38,23 +38,19 @@ pub struct TokenStream<'src> {
 }
 
 #[derive(Debug)]
-pub enum ScanResult {
-    Result(Result<Token, Report>),
+pub enum ScanItem {
+    Token(Token),
     Ignore,
 }
 
-impl ScanResult {
-    fn ok(token: Token) -> ScanResult {
-        Self::Result(Ok(token))
-    }
-
-    fn err(error: Report) -> ScanResult {
-        Self::Result(Err(error))
+impl From<Token> for ScanItem {
+    fn from(token: Token) -> Self {
+        ScanItem::Token(token)
     }
 }
 
 impl<'src> Iterator for TokenStream<'src> {
-    type Item = ScanResult;
+    type Item = Result<ScanItem, Report>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.at_end {
@@ -96,14 +92,14 @@ impl<'src> Iterator for TokenStream<'src> {
                                 break;
                             };
                         }
-                        return Some(ScanResult::Ignore);
+                        return Some(Ok(ScanItem::Ignore));
                     }
                     None => self.make_token(TokenType::Slash, c),
                 },
-                ' ' | '\t' | '\r' => return Some(ScanResult::Ignore),
+                ' ' | '\t' | '\r' => return Some(Ok(ScanItem::Ignore)),
                 '\n' => {
                     self.line += 1;
-                    return Some(ScanResult::Ignore);
+                    return Some(Ok(ScanItem::Ignore));
                 }
                 '"' => {
                     self.lead = Some(c);
@@ -111,16 +107,16 @@ impl<'src> Iterator for TokenStream<'src> {
                 }
                 '0'..='9' => {
                     self.lead = Some(c);
-                    return Some(self.number());
+                    return Some(Ok(self.number()));
                 }
                 '_' | 'a'..='z' | 'A'..='Z' => {
                     self.lead = Some(c);
-                    return Some(self.identifier());
+                    return Some(Ok(self.identifier()));
                 }
                 _ => {
                     let report =
                         Report::error_at_line(self.line, format!("Unexpected character: {c}"));
-                    return Some(ScanResult::err(report));
+                    return Some(Err(report));
                 }
             },
             None => {
@@ -129,7 +125,7 @@ impl<'src> Iterator for TokenStream<'src> {
             }
         };
 
-        Some(ScanResult::ok(token))
+        Some(Ok(token.into()))
     }
 }
 
@@ -148,7 +144,7 @@ impl<'src> TokenStream<'src> {
     }
 
     /// Scan an identifier
-    fn identifier(&mut self) -> ScanResult {
+    fn identifier(&mut self) -> ScanItem {
         let lead = self.lead.take().expect("Expected a leading character");
         let mut lexeme = String::from(lead);
 
@@ -181,11 +177,11 @@ impl<'src> TokenStream<'src> {
 
         let token = self.make_token(typ, lexeme);
 
-        ScanResult::ok(token)
+        token.into()
     }
 
     /// Scan a number token
-    fn number(&mut self) -> ScanResult {
+    fn number(&mut self) -> ScanItem {
         let lead = self.lead.take().expect("Expected a leading digit");
         let mut lexeme = String::from(lead);
 
@@ -209,11 +205,11 @@ impl<'src> TokenStream<'src> {
             .expect("Expected a valid double-precision float");
         let token = self.make_literal_token(TokenType::Number, lexeme, number.into());
 
-        ScanResult::ok(token)
+        token.into()
     }
 
     /// Scan a string token
-    fn string(&mut self) -> ScanResult {
+    fn string(&mut self) -> Result<ScanItem, Report> {
         let lead = self.lead.take().expect("Expected an opening quote");
         let mut lexeme = String::from(lead);
 
@@ -227,7 +223,7 @@ impl<'src> TokenStream<'src> {
         // reached the end of the input without finding a closing quote
         if self.chars.peek().is_none() {
             let report = Report::error_at_line(self.line, "Unterminated string.".into());
-            return ScanResult::err(report);
+            return Err(report);
         } else {
             // consume the closing quote
             // unwrap is safe since peek returned Some(_)
@@ -237,7 +233,7 @@ impl<'src> TokenStream<'src> {
         let literal = Value::from(&lexeme[1..lexeme.len() - 1]);
         let token = self.make_literal_token(TokenType::String, lexeme, literal);
 
-        ScanResult::ok(token)
+        Ok(token.into())
     }
 
     /// Creates a token at the current line with no literal value.
@@ -780,11 +776,11 @@ mod tests {
         let scanner = Scanner::new(input);
 
         let mut output = Vec::new();
-        for sr in scanner.scan_tokens() {
-            let s = match sr {
-                ScanResult::Ignore => continue,
-                ScanResult::Result(Ok(token)) => token.to_string(),
-                ScanResult::Result(Err(e)) => e.to_string(),
+        for res in scanner.scan_tokens() {
+            let s = match res {
+                Ok(ScanItem::Ignore) => continue,
+                Ok(ScanItem::Token(t)) => t.to_string(),
+                Err(e) => e.to_string(),
             };
             output.push(s);
         }

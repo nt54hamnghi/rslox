@@ -6,7 +6,7 @@ use clap::Parser as _;
 use codecrafters_interpreter::cli;
 use codecrafters_interpreter::parser::Parser;
 use codecrafters_interpreter::parser::printer::AstPrinter;
-use codecrafters_interpreter::scanner::ScanResult;
+use codecrafters_interpreter::scanner::ScanItem;
 use codecrafters_interpreter::scanner::Scanner;
 
 fn main() {
@@ -27,9 +27,9 @@ fn parse(filename: PathBuf) {
     let scanner = Scanner::new(&content);
     for result in scanner.scan_tokens() {
         match result {
-            ScanResult::Ignore => continue,
-            ScanResult::Result(Ok(tkn)) => tokens.push(tkn),
-            ScanResult::Result(Err(err)) => {
+            Ok(ScanItem::Ignore) => continue,
+            Ok(ScanItem::Token(tkn)) => tokens.push(tkn),
+            Err(err) => {
                 has_error = true;
                 eprintln!("{err}");
             }
@@ -61,11 +61,11 @@ fn tokenize(filename: PathBuf) {
     let scanner = Scanner::new(&content);
     for result in scanner.scan_tokens() {
         match result {
-            ScanResult::Ignore => continue,
-            ScanResult::Result(Ok(t)) => println!("{t}"),
-            ScanResult::Result(Err(e)) => {
+            Ok(ScanItem::Ignore) => continue,
+            Ok(ScanItem::Token(tkn)) => println!("{tkn}"),
+            Err(err) => {
                 has_error = true;
-                eprintln!("{e}");
+                eprintln!("{err}");
             }
         }
     }

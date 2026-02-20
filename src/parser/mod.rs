@@ -175,7 +175,7 @@ impl Parser {
 mod tests {
     use super::*;
     use crate::parser::printer::AstPrinter;
-    use crate::scanner::{ScanResult, Scanner};
+    use crate::scanner::{ScanItem, Scanner};
     use rstest::rstest;
 
     #[rstest]
@@ -224,9 +224,10 @@ mod tests {
     fn test_parser(#[case] input: &str, #[case] expected_output: &str) {
         let tokens = Scanner::new(&input)
             .scan_tokens()
-            .filter_map(|s| match s {
-                ScanResult::Result(token) => token.ok(),
-                ScanResult::Ignore => None,
+            .filter_map(|r| match r {
+                Ok(ScanItem::Token(tkn)) => Some(tkn),
+                Ok(ScanItem::Ignore) => None,
+                Err(_) => None,
             })
             .collect::<Vec<_>>();
 
