@@ -2,7 +2,7 @@ use std::iter::Peekable;
 use std::vec;
 
 use crate::error::Report;
-use crate::parser::expr::{Ast, Literal};
+use crate::parser::expr::{AstNode, Binary, Grouping, Literal, Unary};
 use crate::scanner::token::TokenType::{
     Bang, BangEqual, Eof, EqualEqual, False, Greater, GreaterEqual, LeftParen, Less, LessEqual,
     Minus, Nil, Number, Plus, RightParen, Slash, Star, String as Str, True,
@@ -25,96 +25,96 @@ impl From<Vec<Token>> for Parser {
 }
 
 impl Parser {
-    pub fn parse(&mut self) -> Result<Ast, Report> {
+    pub fn parse(&mut self) -> Result<AstNode, Report> {
         self.expression()
     }
 
     /// expression → equality ;
-    fn expression(&mut self) -> Result<Ast, Report> {
+    fn expression(&mut self) -> Result<AstNode, Report> {
         self.equality()
     }
 
     /// equality → comparison ( ( "!=" | "==" ) comparison )* ;
-    fn equality(&mut self) -> Result<Ast, Report> {
+    fn equality(&mut self) -> Result<AstNode, Report> {
         let mut expr = self.comparison()?;
 
         while let Some(operator) = self.next_match(&[BangEqual, EqualEqual]) {
             let right = self.comparison()?;
-            expr = Ast::binary(expr, operator, right);
+            expr = Binary::new(expr, operator, right).into();
         }
 
         Ok(expr)
     }
 
     /// comparison → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
-    fn comparison(&mut self) -> Result<Ast, Report> {
+    fn comparison(&mut self) -> Result<AstNode, Report> {
         let mut expr = self.term()?;
 
         while let Some(operator) = self.next_match(&[Greater, GreaterEqual, Less, LessEqual]) {
             let right = self.term()?;
-            expr = Ast::binary(expr, operator, right);
+            expr = Binary::new(expr, operator, right).into();
         }
 
         Ok(expr)
     }
 
     /// term → factor ( ( "-" | "+" ) factor )* ;
-    fn term(&mut self) -> Result<Ast, Report> {
+    fn term(&mut self) -> Result<AstNode, Report> {
         let mut expr = self.factor()?;
 
         while let Some(operator) = self.next_match(&[Minus, Plus]) {
             let right = self.factor()?;
-            expr = Ast::binary(expr, operator, right);
+            expr = Binary::new(expr, operator, right).into();
         }
 
         Ok(expr)
     }
 
     /// factor → unary ( ( "/" | "*" ) unary )* ;
-    fn factor(&mut self) -> Result<Ast, Report> {
+    fn factor(&mut self) -> Result<AstNode, Report> {
         let mut expr = self.unary()?;
 
         while let Some(operator) = self.next_match(&[Slash, Star]) {
             let right = self.unary()?;
-            expr = Ast::binary(expr, operator, right);
+            expr = Binary::new(expr, operator, right).into();
         }
 
         Ok(expr)
     }
 
     /// unary → ( "!" | "-" ) unary | primary ;
-    fn unary(&mut self) -> Result<Ast, Report> {
+    fn unary(&mut self) -> Result<AstNode, Report> {
         if let Some(operator) = self.next_match(&[Bang, Minus]) {
             let right = self.unary()?;
-            return Ok(Ast::unary(operator, right));
+            return Ok(Unary::new(operator, right).into());
         }
 
         self.primary()
     }
 
     /// primary → NUMBER | STRING | "true" | "false" | "nil"| "(" expression ")" ;
-    fn primary(&mut self) -> Result<Ast, Report> {
+    fn primary(&mut self) -> Result<AstNode, Report> {
         if self.next_if(True).is_some() {
-            return Ok(Ast::literal(Literal::from(true)));
+            return Ok(Literal::from(true).into());
         }
 
         if self.next_if(False).is_some() {
-            return Ok(Ast::literal(Literal::from(false)));
+            return Ok(Literal::from(false).into());
         }
 
         if self.next_if(Nil).is_some() {
-            return Ok(Ast::literal(Literal::Nil));
+            return Ok(Literal::Nil.into());
         }
 
         if let Some(token) = self.next_match(&[Number, Str]) {
             let value = token.literal.expect("literal value for token");
-            return Ok(Ast::literal(value.into()));
+            return Ok(Literal::from(value).into());
         }
 
         if self.next_if(LeftParen).is_some() {
             let expr = self.expression()?;
             self.next_ok(RightParen, "Expect ')' after expression".into())?;
-            return Ok(Ast::grouping(expr));
+            return Ok(Grouping::new(expr).into());
         }
 
         Err(self.error("Expect expression".into()))

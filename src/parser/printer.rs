@@ -25,12 +25,12 @@ macro_rules! parenthesize {
 impl Visitor for AstPrinter {
     type Output = String;
 
-    fn visit_grouping_expr<E: Expr>(&self, expr: Grouping<E>) -> Self::Output {
+    fn visit_grouping_expr(&self, expr: &Grouping) -> Self::Output {
         let Grouping { expression } = expr;
         parenthesize!(self, "group", expression)
     }
 
-    fn visit_binary_expr<L: Expr, R: Expr>(&self, expr: Binary<L, R>) -> Self::Output {
+    fn visit_binary_expr(&self, expr: &Binary) -> Self::Output {
         let Binary {
             left,
             operator,
@@ -39,27 +39,23 @@ impl Visitor for AstPrinter {
         parenthesize!(self, operator.lexeme, left, right)
     }
 
-    fn visit_unary_expr<R: Expr>(&self, expr: Unary<R>) -> Self::Output {
+    fn visit_unary_expr(&self, expr: &Unary) -> Self::Output {
         let Unary { operator, right } = expr;
         parenthesize!(self, operator.lexeme, right)
     }
 
-    fn visit_literal_expr(&self, expr: Literal) -> Self::Output {
+    fn visit_literal_expr(&self, expr: &Literal) -> Self::Output {
         expr.to_string()
     }
 }
 
 pub fn print_example() {
-    let expr = Binary {
-        left: Literal::from(0.0),
-        operator: Token::new(TokenType::Plus, "+".into(), None, 1),
-        right: Grouping {
-            expression: Unary {
-                operator: Token::new(TokenType::Plus, "-".into(), None, 1),
-                right: Literal::from(42.),
-            },
-        },
-    };
+    let plus = Token::new(TokenType::Plus, "+".into(), None, 1);
+    let minus = Token::new(TokenType::Minus, "-".into(), None, 1);
+
+    let left = Literal::from(0.0);
+    let right = Grouping::new(Unary::new(minus, Literal::from(42.0).into()).into());
+    let expr = Binary::new(left.into(), plus, right.into());
 
     let printer = AstPrinter;
     let s = printer.print(expr);

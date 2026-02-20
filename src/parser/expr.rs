@@ -3,105 +3,114 @@ use std::fmt::Display;
 use crate::scanner::token::{Token, Value};
 
 pub trait Expr {
-    fn accept<V: Visitor>(self, v: V) -> V::Output;
+    fn accept<V: Visitor>(&self, v: V) -> V::Output;
 }
 
 pub trait Visitor {
     type Output;
-    fn visit_grouping_expr<E: Expr>(&self, expr: Grouping<E>) -> Self::Output;
-    fn visit_binary_expr<L: Expr, R: Expr>(&self, expr: Binary<L, R>) -> Self::Output;
-    fn visit_unary_expr<R: Expr>(&self, expr: Unary<R>) -> Self::Output;
-    fn visit_literal_expr(&self, expr: Literal) -> Self::Output;
+    fn visit_grouping_expr(&self, expr: &Grouping) -> Self::Output;
+    fn visit_binary_expr(&self, expr: &Binary) -> Self::Output;
+    fn visit_unary_expr(&self, expr: &Unary) -> Self::Output;
+    fn visit_literal_expr(&self, expr: &Literal) -> Self::Output;
 }
 
 #[derive(Debug)]
-pub enum Ast {
-    Grouping(Grouping<Box<Ast>>),
-    Binary(Binary<Box<Ast>, Box<Ast>>),
-    Unary(Unary<Box<Ast>>),
+pub enum AstNode {
+    Grouping(Grouping),
+    Binary(Binary),
+    Unary(Unary),
     Literal(Literal),
 }
 
-impl Expr for Ast {
-    fn accept<V: Visitor>(self, v: V) -> V::Output {
+impl Expr for AstNode {
+    fn accept<V: Visitor>(&self, v: V) -> V::Output {
         match self {
-            Ast::Grouping(expr) => expr.accept(v),
-            Ast::Binary(expr) => expr.accept(v),
-            Ast::Unary(expr) => expr.accept(v),
-            Ast::Literal(expr) => expr.accept(v),
+            AstNode::Grouping(expr) => expr.accept(v),
+            AstNode::Binary(expr) => expr.accept(v),
+            AstNode::Unary(expr) => expr.accept(v),
+            AstNode::Literal(expr) => expr.accept(v),
         }
     }
 }
 
-impl Expr for Box<Ast> {
-    fn accept<V: Visitor>(self, v: V) -> V::Output {
-        (*self).accept(v)
-    }
-}
-
-impl Ast {
-    pub fn binary(left: Ast, operator: Token, right: Ast) -> Self {
-        let expr = Binary {
-            left: Box::new(left),
-            operator,
-            right: Box::new(right),
-        };
-        Self::Binary(expr)
-    }
-
-    pub fn unary(operator: Token, right: Ast) -> Self {
-        let expr = Unary {
-            operator,
-            right: Box::new(right),
-        };
-        Self::Unary(expr)
-    }
-
-    pub fn literal(expr: Literal) -> Self {
-        Self::Literal(expr)
-    }
-
-    pub(crate) fn grouping(expr: Ast) -> Ast {
-        let expr = Grouping {
-            expression: Box::new(expr),
-        };
-        Self::Grouping(expr)
-    }
-}
-
 #[derive(Debug)]
-pub struct Grouping<E> {
-    pub expression: E,
+pub struct Grouping {
+    pub expression: Box<AstNode>,
 }
 
-impl<E: Expr> Expr for Grouping<E> {
-    fn accept<V: Visitor>(self, v: V) -> V::Output {
+impl Expr for Grouping {
+    fn accept<V: Visitor>(&self, v: V) -> V::Output {
         v.visit_grouping_expr(self)
     }
 }
 
-#[derive(Debug)]
-pub struct Binary<L, R> {
-    pub left: L,
-    pub operator: Token,
-    pub right: R,
+impl Grouping {
+    pub fn new(expression: AstNode) -> Self {
+        Self {
+            expression: Box::new(expression),
+        }
+    }
 }
 
-impl<L: Expr, R: Expr> Expr for Binary<L, R> {
-    fn accept<V: Visitor>(self, v: V) -> V::Output {
-        v.visit_binary_expr(self)
+impl From<Grouping> for AstNode {
+    fn from(grouping: Grouping) -> Self {
+        Self::Grouping(grouping)
     }
 }
 
 #[derive(Debug)]
-pub struct Unary<R> {
+pub struct Binary {
+    pub left: Box<AstNode>,
     pub operator: Token,
-    pub right: R,
+    pub right: Box<AstNode>,
 }
 
-impl<R: Expr> Expr for Unary<R> {
-    fn accept<V: Visitor>(self, v: V) -> V::Output {
+impl Expr for Binary {
+    fn accept<V: Visitor>(&self, v: V) -> V::Output {
+        v.visit_binary_expr(self)
+    }
+}
+
+impl Binary {
+    pub fn new(left: AstNode, operator: Token, right: AstNode) -> Self {
+        Self {
+            left: Box::new(left),
+            operator,
+            right: Box::new(right),
+        }
+    }
+}
+
+impl From<Binary> for AstNode {
+    fn from(binary: Binary) -> Self {
+        Self::Binary(binary)
+    }
+}
+
+#[derive(Debug)]
+pub struct Unary {
+    pub operator: Token,
+    pub right: Box<AstNode>,
+}
+
+impl Expr for Unary {
+    fn accept<V: Visitor>(&self, v: V) -> V::Output {
         v.visit_unary_expr(self)
+    }
+}
+
+impl Unary {
+    pub fn new(operator: Token, right: AstNode) -> Self {
+        Self {
+            operator,
+            right: Box::new(right),
+        }
+    }
+}
+
+impl From<Unary> for AstNode {
+    fn from(unary: Unary) -> Self {
+        Self::Unary(unary)
     }
 }
 
@@ -114,8 +123,14 @@ pub enum Literal {
 }
 
 impl Expr for Literal {
-    fn accept<V: Visitor>(self, v: V) -> V::Output {
+    fn accept<V: Visitor>(&self, v: V) -> V::Output {
         v.visit_literal_expr(self)
+    }
+}
+
+impl From<Literal> for AstNode {
+    fn from(value: Literal) -> Self {
+        Self::Literal(value)
     }
 }
 
