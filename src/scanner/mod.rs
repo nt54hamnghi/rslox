@@ -1,8 +1,9 @@
 use std::iter::Peekable;
 use std::str::Chars;
 
+use crate::Value;
 use crate::error::Report;
-use crate::scanner::token::{Token, TokenType, Value};
+use crate::scanner::token::{Token, TokenType};
 
 pub mod token;
 

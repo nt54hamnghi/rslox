@@ -1,17 +1,15 @@
-use std::fmt::Display;
-
-use crate::scanner::token::{Token, Value};
+use crate::{Value, scanner::token::Token};
 
 pub trait Expr {
-    fn accept<V: Visitor>(&self, v: V) -> V::Output;
+    fn accept<V: Visitor>(&self, v: &V) -> V::Output;
 }
 
 pub trait Visitor {
     type Output;
-    fn visit_grouping_expr(&self, expr: &Grouping) -> Self::Output;
-    fn visit_binary_expr(&self, expr: &Binary) -> Self::Output;
-    fn visit_unary_expr(&self, expr: &Unary) -> Self::Output;
     fn visit_literal_expr(&self, expr: &Literal) -> Self::Output;
+    fn visit_grouping_expr(&self, expr: &Grouping) -> Self::Output;
+    fn visit_unary_expr(&self, expr: &Unary) -> Self::Output;
+    fn visit_binary_expr(&self, expr: &Binary) -> Self::Output;
 }
 
 #[derive(Debug)]
@@ -23,7 +21,7 @@ pub enum AstNode {
 }
 
 impl Expr for AstNode {
-    fn accept<V: Visitor>(&self, v: V) -> V::Output {
+    fn accept<V: Visitor>(&self, v: &V) -> V::Output {
         match self {
             AstNode::Grouping(expr) => expr.accept(v),
             AstNode::Binary(expr) => expr.accept(v),
@@ -39,7 +37,7 @@ pub struct Grouping {
 }
 
 impl Expr for Grouping {
-    fn accept<V: Visitor>(&self, v: V) -> V::Output {
+    fn accept<V: Visitor>(&self, v: &V) -> V::Output {
         v.visit_grouping_expr(self)
     }
 }
@@ -66,7 +64,7 @@ pub struct Binary {
 }
 
 impl Expr for Binary {
-    fn accept<V: Visitor>(&self, v: V) -> V::Output {
+    fn accept<V: Visitor>(&self, v: &V) -> V::Output {
         v.visit_binary_expr(self)
     }
 }
@@ -94,7 +92,7 @@ pub struct Unary {
 }
 
 impl Expr for Unary {
-    fn accept<V: Visitor>(&self, v: V) -> V::Output {
+    fn accept<V: Visitor>(&self, v: &V) -> V::Output {
         v.visit_unary_expr(self)
     }
 }
@@ -114,16 +112,13 @@ impl From<Unary> for AstNode {
     }
 }
 
-#[derive(Debug)]
-pub enum Literal {
-    Number(f64),
-    String(String),
-    Boolean(bool),
-    Nil,
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub struct Literal {
+    pub value: Value,
 }
 
 impl Expr for Literal {
-    fn accept<V: Visitor>(&self, v: V) -> V::Output {
+    fn accept<V: Visitor>(&self, v: &V) -> V::Output {
         v.visit_literal_expr(self)
     }
 }
@@ -134,52 +129,8 @@ impl From<Literal> for AstNode {
     }
 }
 
-impl Display for Literal {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Literal::Number(n) => {
-                if n.fract() == 0.0 {
-                    write!(f, "{:.1}", n)
-                } else {
-                    Display::fmt(n, f)
-                }
-            }
-            Literal::String(s) => Display::fmt(s, f),
-            Literal::Boolean(b) => Display::fmt(b, f),
-            Literal::Nil => write!(f, "nil"),
-        }
-    }
-}
-
-impl From<&str> for Literal {
-    fn from(s: &str) -> Self {
-        Literal::String(s.into())
-    }
-}
-
-impl From<String> for Literal {
-    fn from(s: String) -> Self {
-        Literal::String(s)
-    }
-}
-
-impl From<f64> for Literal {
-    fn from(n: f64) -> Self {
-        Literal::Number(n)
-    }
-}
-
-impl From<bool> for Literal {
-    fn from(b: bool) -> Self {
-        Literal::Boolean(b)
-    }
-}
-
 impl From<Value> for Literal {
     fn from(value: Value) -> Self {
-        match value {
-            Value::Number(n) => n.into(),
-            Value::String(s) => s.into(),
-        }
+        Literal { value }
     }
 }

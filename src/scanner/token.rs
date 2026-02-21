@@ -1,7 +1,9 @@
 use std::borrow::Cow;
 use std::fmt::Display;
 
-#[derive(Debug)]
+use crate::Value;
+
+#[derive(Debug, Clone)]
 pub struct Token {
     pub typ: TokenType,
     pub lexeme: String,
@@ -28,44 +30,11 @@ impl Token {
 impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let literal = match &self.literal {
-            Some(l) => Cow::Owned(l.to_string()),
+            Some(l) => Cow::Owned(format!("{:?}", l)),
             None => Cow::Borrowed("null"),
         };
 
         write!(f, "{} {} {}", self.typ, self.lexeme, literal)
-    }
-}
-
-#[derive(Debug)]
-pub enum Value {
-    Number(f64),
-    String(String),
-}
-
-impl Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Value::Number(n) => {
-                if n.fract() == 0.0 {
-                    write!(f, "{:.1}", n)
-                } else {
-                    write!(f, "{}", n)
-                }
-            }
-            Value::String(s) => Display::fmt(s, f),
-        }
-    }
-}
-
-impl From<&str> for Value {
-    fn from(s: &str) -> Self {
-        Value::String(s.to_owned())
-    }
-}
-
-impl From<f64> for Value {
-    fn from(n: f64) -> Self {
-        Value::Number(n)
     }
 }
 

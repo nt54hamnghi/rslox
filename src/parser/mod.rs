@@ -1,6 +1,7 @@
 use std::iter::Peekable;
 use std::vec;
 
+use crate::Value;
 use crate::error::Report;
 use crate::parser::expr::{AstNode, Binary, Grouping, Literal, Unary};
 use crate::scanner::token::TokenType::{
@@ -95,15 +96,18 @@ impl Parser {
     /// primary → NUMBER | STRING | "true" | "false" | "nil"| "(" expression ")" ;
     fn primary(&mut self) -> Result<AstNode, Report> {
         if self.next_if(True).is_some() {
-            return Ok(Literal::from(true).into());
+            let val = Value::from(true);
+            return Ok(Literal::from(val).into());
         }
 
         if self.next_if(False).is_some() {
-            return Ok(Literal::from(false).into());
+            let val = Value::from(false);
+            return Ok(Literal::from(val).into());
         }
 
         if self.next_if(Nil).is_some() {
-            return Ok(Literal::Nil.into());
+            let val = Value::Nil;
+            return Ok(Literal::from(val).into());
         }
 
         if let Some(token) = self.next_match(&[Number, Str]) {
@@ -233,7 +237,7 @@ mod tests {
 
         let mut parser = Parser::from(tokens);
         let expr = parser.parse().unwrap();
-        let expr_str = AstPrinter.print(expr);
+        let expr_str = AstPrinter.print(&expr);
         assert_eq!(expected_output, expr_str)
     }
 }

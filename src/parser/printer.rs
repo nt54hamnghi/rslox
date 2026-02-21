@@ -1,3 +1,4 @@
+use crate::Value;
 use crate::parser::expr::{Binary, Expr, Grouping, Literal, Unary, Visitor};
 use crate::scanner::token::{Token, TokenType};
 
@@ -5,8 +6,8 @@ use crate::scanner::token::{Token, TokenType};
 pub struct AstPrinter;
 
 impl AstPrinter {
-    pub fn print<E: Expr>(self, expr: E) -> String {
-        expr.accept(self)
+    pub fn print<E: Expr>(self, expr: &E) -> String {
+        expr.accept(&self)
     }
 }
 
@@ -15,7 +16,7 @@ macro_rules! parenthesize {
         let mut output = format!("({}", $name);
         $(
             output.push(' ');
-            output.push_str(&$expression.accept(*$visitor));
+            output.push_str(&$expression.accept($visitor));
         )+
         output.push(')');
         output
@@ -45,7 +46,7 @@ impl Visitor for AstPrinter {
     }
 
     fn visit_literal_expr(&self, expr: &Literal) -> Self::Output {
-        expr.to_string()
+        format!("{:?}", expr.value)
     }
 }
 
@@ -53,11 +54,11 @@ pub fn print_example() {
     let plus = Token::new(TokenType::Plus, "+".into(), None, 1);
     let minus = Token::new(TokenType::Minus, "-".into(), None, 1);
 
-    let left = Literal::from(0.0);
-    let right = Grouping::new(Unary::new(minus, Literal::from(42.0).into()).into());
+    let left = Literal::from(Value::from(0.0));
+    let right = Grouping::new(Unary::new(minus, Literal::from(Value::from(42.0)).into()).into());
     let expr = Binary::new(left.into(), plus, right.into());
 
     let printer = AstPrinter;
-    let s = printer.print(expr);
+    let s = printer.print(&expr);
     println!("{}", s);
 }
