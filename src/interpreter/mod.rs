@@ -175,4 +175,17 @@ mod tests {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
         assert_eq!(expected_output, output);
     }
+
+    #[rstest]
+    #[case("56", Value::Number(56.0))]
+    #[case("87.92", Value::Number(87.92))]
+    #[case(r#""foo baz""#, Value::String("foo baz".to_string()))]
+    #[case(r#""88""#, Value::String("88".to_string()))]
+    fn test_interpreter_literals_string_and_number(
+        #[case] input: &str,
+        #[case] expected_output: Value,
+    ) {
+        let output = eval_expr(input).expect("Expected evaluation to succeed");
+        assert_eq!(expected_output, output);
+    }
 }
