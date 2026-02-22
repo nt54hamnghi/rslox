@@ -92,7 +92,7 @@ impl Visitor for Interpreter {
     /// Returns an error for invalid operand types or invalid numeric operations.
     fn visit_binary_expr(&self, expr: &Binary) -> Self::Output {
         let left = self.evaluate(&expr.left)?;
-        let right = self.evaluate(&expr.left)?;
+        let right = self.evaluate(&expr.right)?;
         let op = expr.operator.clone();
 
         match op.typ {
@@ -195,6 +195,19 @@ mod tests {
     #[case(r#"("foo baz")"#, Value::String("foo baz".to_string()))]
     #[case("((false))", Value::Boolean(false))]
     fn test_interpreter_grouping_expressions(#[case] input: &str, #[case] expected_output: Value) {
+        let output = eval_expr(input).expect("Expected evaluation to succeed");
+        assert_eq!(expected_output, output);
+    }
+
+    #[rstest]
+    #[case("-79", Value::Number(-79.0))]
+    #[case("!true", Value::Boolean(false))]
+    #[case("!nil", Value::Boolean(true))]
+    #[case("(!!57)", Value::Boolean(true))]
+    fn test_interpreter_unary_negation_and_not(
+        #[case] input: &str,
+        #[case] expected_output: Value,
+    ) {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
         assert_eq!(expected_output, output);
     }
