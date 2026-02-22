@@ -256,4 +256,17 @@ mod tests {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
         assert_eq!(expected_output, output);
     }
+
+    #[rstest]
+    #[case(r#""quz" != "foo""#, Value::Boolean(true))]
+    #[case(r#""quz" == "quz""#, Value::Boolean(true))]
+    #[case(r#"96 == "96""#, Value::Boolean(false))]
+    #[case("151 == (76 + 75)", Value::Boolean(true))]
+    fn test_interpreter_equality_operators(
+        #[case] input: &str,
+        #[case] expected_output: Value,
+    ) {
+        let output = eval_expr(input).expect("Expected evaluation to succeed");
+        assert_eq!(expected_output, output);
+    }
 }
