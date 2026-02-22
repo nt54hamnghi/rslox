@@ -132,7 +132,10 @@ impl Visitor for Interpreter {
             TokenType::Plus => match (left, right) {
                 (Value::Number(a), Value::Number(b)) => Ok((a + b).into()),
                 (Value::String(a), Value::String(b)) => Ok(format!("{a}{b}").into()),
-                _ => todo!(),
+                _ => Err(RuntimeError::new(
+                    expr.operator.clone(),
+                    "Operands must be numbers.",
+                )),
             },
             _ => panic!(
                 "Unexpected token type for binary expression, found {:?}",
@@ -249,10 +252,7 @@ mod tests {
         r#"("baz" + "quz") + ("world" + "baz")"#,
         Value::String("bazquzworldbaz".to_string())
     )]
-    fn test_interpreter_string_concatenation(
-        #[case] input: &str,
-        #[case] expected_output: Value,
-    ) {
+    fn test_interpreter_string_concatenation(#[case] input: &str, #[case] expected_output: Value) {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
         assert_eq!(expected_output, output);
     }
@@ -262,10 +262,7 @@ mod tests {
     #[case(r#""bar" == "bar""#, Value::Boolean(true))]
     #[case(r#"92 == "92""#, Value::Boolean(false))]
     #[case("79 == (36 + 43)", Value::Boolean(true))]
-    fn test_interpreter_equality_operators(
-        #[case] input: &str,
-        #[case] expected_output: Value,
-    ) {
+    fn test_interpreter_equality_operators(#[case] input: &str, #[case] expected_output: Value) {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
         assert_eq!(expected_output, output);
     }
@@ -275,10 +272,7 @@ mod tests {
     #[case("18 <= 118", Value::Boolean(true))]
     #[case("74 >= 74", Value::Boolean(true))]
     #[case("(29 - 55) >= -(36 / 18 + 30)", Value::Boolean(true))]
-    fn test_interpreter_relational_operators(
-        #[case] input: &str,
-        #[case] expected_output: Value,
-    ) {
+    fn test_interpreter_relational_operators(#[case] input: &str, #[case] expected_output: Value) {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
         assert_eq!(expected_output, output);
     }
@@ -299,6 +293,16 @@ mod tests {
     #[case("true / false")]
     #[case(r#"("foo" + "quz") * ("world" + "world")"#)]
     fn test_interpreter_runtime_errors_binary_operators_1(#[case] input: &str) {
+        let err = eval_expr(input).expect_err("Expected evaluation to fail");
+        assert_eq!("Operands must be numbers.\n[line 1]", err.to_string());
+    }
+
+    #[rstest]
+    #[case(r#""quz" + true"#)]
+    #[case(r#"11 + "hello" + 76"#)]
+    #[case("82 - false")]
+    #[case(r#"true - ("quz" + "baz")"#)]
+    fn test_interpreter_runtime_errors_binary_operators_2(#[case] input: &str) {
         let err = eval_expr(input).expect_err("Expected evaluation to fail");
         assert_eq!("Operands must be numbers.\n[line 1]", err.to_string());
     }
