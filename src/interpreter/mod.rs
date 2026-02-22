@@ -237,4 +237,23 @@ mod tests {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
         assert_eq!(expected_output, output);
     }
+
+    #[rstest]
+    #[case(r#""hello" + "foo""#, Value::String("hellofoo".to_string()))]
+    #[case(r#""quz" + "43""#, Value::String("quz43".to_string()))]
+    #[case(
+        r#""hello" + "hello" + "foo""#,
+        Value::String("hellohellofoo".to_string())
+    )]
+    #[case(
+        r#"("baz" + "quz") + ("world" + "baz")"#,
+        Value::String("bazquzworldbaz".to_string())
+    )]
+    fn test_interpreter_string_concatenation(
+        #[case] input: &str,
+        #[case] expected_output: Value,
+    ) {
+        let output = eval_expr(input).expect("Expected evaluation to succeed");
+        assert_eq!(expected_output, output);
+    }
 }
