@@ -224,4 +224,17 @@ mod tests {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
         assert_eq!(expected_output, output);
     }
+
+    #[rstest]
+    #[case("44 - 55", Value::Number(-11.0))]
+    #[case("54 + 32 - 57", Value::Number(29.0))]
+    #[case("63 + 42 - (-(34 - 95))", Value::Number(44.0))]
+    #[case("(-56 + 56) * (30 * 42) / (1 + 4)", Value::Number(0.0))]
+    fn test_interpreter_arithmetic_operators_2(
+        #[case] input: &str,
+        #[case] expected_output: Value,
+    ) {
+        let output = eval_expr(input).expect("Expected evaluation to succeed");
+        assert_eq!(expected_output, output);
+    }
 }
