@@ -188,4 +188,14 @@ mod tests {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
         assert_eq!(expected_output, output);
     }
+
+    #[rstest]
+    #[case("(true)", Value::Boolean(true))]
+    #[case("(36)", Value::Number(36.0))]
+    #[case(r#"("foo baz")"#, Value::String("foo baz".to_string()))]
+    #[case("((false))", Value::Boolean(false))]
+    fn test_interpreter_grouping_expressions(#[case] input: &str, #[case] expected_output: Value) {
+        let output = eval_expr(input).expect("Expected evaluation to succeed");
+        assert_eq!(expected_output, output);
+    }
 }
