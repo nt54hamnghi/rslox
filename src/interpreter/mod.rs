@@ -292,4 +292,14 @@ mod tests {
         let err = eval_expr(input).expect_err("Expected evaluation to fail");
         assert_eq!("Operand must be a number.\n[line 1]", err.to_string());
     }
+
+    #[rstest]
+    #[case(r#"90 * "quz""#)]
+    #[case(r#""baz" / 96"#)]
+    #[case("true / false")]
+    #[case(r#"("foo" + "quz") * ("world" + "world")"#)]
+    fn test_interpreter_runtime_errors_binary_operators_1(#[case] input: &str) {
+        let err = eval_expr(input).expect_err("Expected evaluation to fail");
+        assert_eq!("Operands must be numbers.\n[line 1]", err.to_string());
+    }
 }
