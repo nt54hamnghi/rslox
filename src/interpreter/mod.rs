@@ -306,4 +306,14 @@ mod tests {
         let err = eval_expr(input).expect_err("Expected evaluation to fail");
         assert_eq!("Operands must be numbers.\n[line 1]", err.to_string());
     }
+
+    #[rstest]
+    #[case(r#""hello" < false"#)]
+    #[case("true <= (39 + 48)")]
+    #[case(r#"29 > ("hello" + "quz")"#)]
+    #[case("false >= true")]
+    fn test_interpreter_runtime_errors_relational_operators(#[case] input: &str) {
+        let err = eval_expr(input).expect_err("Expected evaluation to fail");
+        assert_eq!("Operands must be numbers.\n[line 1]", err.to_string());
+    }
 }
