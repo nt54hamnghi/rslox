@@ -258,15 +258,38 @@ mod tests {
     }
 
     #[rstest]
-    #[case(r#""quz" != "foo""#, Value::Boolean(true))]
-    #[case(r#""quz" == "quz""#, Value::Boolean(true))]
-    #[case(r#"96 == "96""#, Value::Boolean(false))]
-    #[case("151 == (76 + 75)", Value::Boolean(true))]
+    #[case(r#""bar" != "world""#, Value::Boolean(true))]
+    #[case(r#""bar" == "bar""#, Value::Boolean(true))]
+    #[case(r#"92 == "92""#, Value::Boolean(false))]
+    #[case("79 == (36 + 43)", Value::Boolean(true))]
     fn test_interpreter_equality_operators(
         #[case] input: &str,
         #[case] expected_output: Value,
     ) {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
         assert_eq!(expected_output, output);
+    }
+
+    #[rstest]
+    #[case("18 > -44", Value::Boolean(true))]
+    #[case("18 <= 118", Value::Boolean(true))]
+    #[case("74 >= 74", Value::Boolean(true))]
+    #[case("(29 - 55) >= -(36 / 18 + 30)", Value::Boolean(true))]
+    fn test_interpreter_relational_operators(
+        #[case] input: &str,
+        #[case] expected_output: Value,
+    ) {
+        let output = eval_expr(input).expect("Expected evaluation to succeed");
+        assert_eq!(expected_output, output);
+    }
+
+    #[rstest]
+    #[case(r#"-"hello""#)]
+    #[case("-true")]
+    #[case("-false")]
+    #[case(r#"-("baz" + "bar")"#)]
+    fn test_interpreter_runtime_errors_unary_operators(#[case] input: &str) {
+        let err = eval_expr(input).expect_err("Expected evaluation to fail");
+        assert_eq!("Operand must be a number.\n[line 1]", err.to_string());
     }
 }
