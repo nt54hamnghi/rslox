@@ -141,3 +141,38 @@ impl Visitor for Interpreter {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::Parser;
+    use crate::scanner::{ScanItem, Scanner};
+    use rstest::rstest;
+
+    fn eval_expr(input: &str) -> Result<Value, RuntimeError> {
+        let tokens = Scanner::new(input)
+            .scan_tokens()
+            .filter_map(|r| match r {
+                Ok(ScanItem::Token(tkn)) => Some(tkn),
+                Ok(ScanItem::Ignore) => None,
+                Err(_) => None,
+            })
+            .collect::<Vec<_>>();
+
+        let mut parser = Parser::from(tokens);
+        let expr = parser.parse().expect("Expected a valid expression");
+        Interpreter.evaluate(&expr)
+    }
+
+    #[rstest]
+    #[case("true", Value::Boolean(true))]
+    #[case("false", Value::Boolean(false))]
+    #[case("nil", Value::Nil)]
+    fn test_interpreter_literals_boolean_and_nil(
+        #[case] input: &str,
+        #[case] expected_output: Value,
+    ) {
+        let output = eval_expr(input).expect("Expected evaluation to succeed");
+        assert_eq!(expected_output, output);
+    }
+}
