@@ -2,7 +2,7 @@ use std::iter::Peekable;
 use std::str::Chars;
 
 use crate::Value;
-use crate::error::Report;
+use crate::error::StaticError;
 use crate::scanner::token::{Token, TokenType};
 
 pub mod token;
@@ -51,7 +51,7 @@ impl From<Token> for ScanItem {
 }
 
 impl<'src> Iterator for TokenStream<'src> {
-    type Item = Result<ScanItem, Report>;
+    type Item = Result<ScanItem, StaticError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.at_end {
@@ -116,7 +116,7 @@ impl<'src> Iterator for TokenStream<'src> {
                 }
                 _ => {
                     let report =
-                        Report::error_at_line(self.line, format!("Unexpected character: {c}"));
+                        StaticError::error_at_line(self.line, format!("Unexpected character: {c}"));
                     return Some(Err(report));
                 }
             },
@@ -210,7 +210,7 @@ impl<'src> TokenStream<'src> {
     }
 
     /// Scan a string token
-    fn string(&mut self) -> Result<ScanItem, Report> {
+    fn string(&mut self) -> Result<ScanItem, StaticError> {
         let lead = self.lead.take().expect("Expected an opening quote");
         let mut lexeme = String::from(lead);
 
@@ -223,7 +223,7 @@ impl<'src> TokenStream<'src> {
 
         // reached the end of the input without finding a closing quote
         if self.chars.peek().is_none() {
-            let report = Report::error_at_line(self.line, "Unterminated string.".into());
+            let report = StaticError::error_at_line(self.line, "Unterminated string.".into());
             return Err(report);
         } else {
             // consume the closing quote

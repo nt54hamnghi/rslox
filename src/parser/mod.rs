@@ -2,7 +2,7 @@ use std::iter::Peekable;
 use std::vec;
 
 use crate::Value;
-use crate::error::Report;
+use crate::error::StaticError;
 use crate::parser::expr::{Binary, ExprNode, Grouping, Literal, Unary};
 use crate::parser::stmt::{Expression, Print, StmtNode};
 use crate::scanner::token::{Token, TokenType};
@@ -24,7 +24,12 @@ impl From<Vec<Token>> for Parser {
 }
 
 impl Parser {
-    pub fn parse(&mut self) -> Result<Vec<StmtNode>, Report> {
+    /// Parses the full token stream as a sequence of statements until EOF.
+    ///
+    /// Returns:
+    /// - `Ok(Vec<StmtNode>)` with all parsed statements.
+    /// - `Err(Report)` when any statement cannot be parsed.
+    pub fn parse(&mut self) -> Result<Vec<StmtNode>, StaticError> {
         let mut stmts = Vec::new();
 
         while !self.is_at_end() {
@@ -35,25 +40,33 @@ impl Parser {
         Ok(stmts)
     }
 
-    pub fn parse_expression(&mut self) -> Result<ExprNode, Report> {
+    /// Parses a single expression from the current parser position.
+    ///
+    /// This is used for expression-only entry points (for example, parse/eval
+    /// commands that do not expect statement wrappers).
+    ///
+    /// Returns:
+    /// - `Ok(ExprNode)` for a successfully parsed expression.
+    /// - `Err(Report)` if expression parsing fails.
+    pub fn parse_expression(&mut self) -> Result<ExprNode, StaticError> {
         self.expression()
     }
 
-    fn statement(&mut self) -> Result<StmtNode, Report> {
+    fn statement(&mut self) -> Result<StmtNode, StaticError> {
         if self.next_if(TokenType::Print).is_some() {
             return self.print_statement();
         }
         self.expression_statement()
     }
 
-    fn print_statement(&mut self) -> Result<StmtNode, Report> {
+    fn print_statement(&mut self) -> Result<StmtNode, StaticError> {
         let expr = self.expression()?;
         self.expect_semicolon()?;
 
         Ok(Print::new(expr).into())
     }
 
-    fn expression_statement(&mut self) -> Result<StmtNode, Report> {
+    fn expression_statement(&mut self) -> Result<StmtNode, StaticError> {
         let expr = self.expression()?;
         self.expect_semicolon()?;
 
@@ -61,12 +74,12 @@ impl Parser {
     }
 
     /// expression → equality ;
-    fn expression(&mut self) -> Result<ExprNode, Report> {
+    fn expression(&mut self) -> Result<ExprNode, StaticError> {
         self.equality()
     }
 
     /// equality → comparison ( ( "!=" | "==" ) comparison )* ;
-    fn equality(&mut self) -> Result<ExprNode, Report> {
+    fn equality(&mut self) -> Result<ExprNode, StaticError> {
         let mut expr = self.comparison()?;
 
         while let Some(operator) = self.next_match(&[TokenType::BangEqual, TokenType::EqualEqual]) {
@@ -78,7 +91,7 @@ impl Parser {
     }
 
     /// comparison → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
-    fn comparison(&mut self) -> Result<ExprNode, Report> {
+    fn comparison(&mut self) -> Result<ExprNode, StaticError> {
         let mut expr = self.term()?;
 
         while let Some(operator) = self.next_match(&[
@@ -95,7 +108,7 @@ impl Parser {
     }
 
     /// term → factor ( ( "-" | "+" ) factor )* ;
-    fn term(&mut self) -> Result<ExprNode, Report> {
+    fn term(&mut self) -> Result<ExprNode, StaticError> {
         let mut expr = self.factor()?;
 
         while let Some(operator) = self.next_match(&[TokenType::Minus, TokenType::Plus]) {
@@ -107,7 +120,7 @@ impl Parser {
     }
 
     /// factor → unary ( ( "/" | "*" ) unary )* ;
-    fn factor(&mut self) -> Result<ExprNode, Report> {
+    fn factor(&mut self) -> Result<ExprNode, StaticError> {
         let mut expr = self.unary()?;
 
         while let Some(operator) = self.next_match(&[TokenType::Slash, TokenType::Star]) {
@@ -119,7 +132,7 @@ impl Parser {
     }
 
     /// unary → ( "!" | "-" ) unary | primary ;
-    fn unary(&mut self) -> Result<ExprNode, Report> {
+    fn unary(&mut self) -> Result<ExprNode, StaticError> {
         if let Some(operator) = self.next_match(&[TokenType::Bang, TokenType::Minus]) {
             let right = self.unary()?;
             return Ok(Unary::new(operator, right).into());
@@ -129,7 +142,7 @@ impl Parser {
     }
 
     /// primary → NUMBER | STRING | "true" | "false" | "nil"| "(" expression ")" ;
-    fn primary(&mut self) -> Result<ExprNode, Report> {
+    fn primary(&mut self) -> Result<ExprNode, StaticError> {
         if self.next_if(TokenType::True).is_some() {
             let val = Value::from(true);
             return Ok(Literal::from(val).into());
@@ -192,7 +205,7 @@ impl Parser {
     /// Returns:
     /// - `Ok(Token)` if the next token matches the given type, consuming it.
     /// - `Err(Report)` if the next token doesn't match or if at end of tokens.
-    fn next_ok(&mut self, tt: TokenType, message: String) -> Result<Token, Report> {
+    fn next_ok(&mut self, tt: TokenType, message: String) -> Result<Token, StaticError> {
         self.next_if(tt).ok_or(self.error(message))
     }
 
@@ -201,7 +214,7 @@ impl Parser {
     /// Returns:
     /// - `Ok(Token)` when the next token is `;`, consuming it.
     /// - `Err(Report)` when `;` is missing.
-    fn expect_semicolon(&mut self) -> Result<Token, Report> {
+    fn expect_semicolon(&mut self) -> Result<Token, StaticError> {
         self.next_ok(TokenType::Semicolon, "Expect ';' after value.".into())
     }
 
@@ -213,9 +226,9 @@ impl Parser {
         self.tokens.peek().is_none_or(|t| t.typ == TokenType::Eof)
     }
 
-    fn error(&mut self, message: String) -> Report {
+    fn error(&mut self, message: String) -> StaticError {
         let token = self.tokens.peek().expect("expected a token");
-        Report::error_at_token(token, message)
+        StaticError::error_at_token(token, message)
     }
 }
 

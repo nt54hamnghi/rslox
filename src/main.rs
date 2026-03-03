@@ -5,6 +5,7 @@ use std::{fs, io};
 
 use clap::Parser as _;
 use codecrafters_interpreter::cli::{Args, Command};
+use codecrafters_interpreter::error::Report;
 use codecrafters_interpreter::interpreter::Interpreter;
 use codecrafters_interpreter::parser::Parser;
 use codecrafters_interpreter::parser::expr::ExprNode;
@@ -26,15 +27,22 @@ fn main() {
         Command::Evaluate { filename } => {
             evaluate(filename, io::stdout());
         }
-        Command::Run { filename } => run(filename),
+        Command::Run { filename } => {
+            let res = run(filename);
+            if let Err(err) = res {
+                err.exit()
+            }
+        }
     };
 }
 
-fn run(filename: PathBuf) {
+fn run(filename: PathBuf) -> Result<(), Report> {
     let tokens = tokenize(filename, null());
     let mut parser = Parser::from(tokens);
-    let ast = parser.parse().unwrap();
-    Interpreter.interpret(&ast).unwrap();
+    let ast = parser.parse()?;
+    Interpreter.interpret(&ast)?;
+
+    Ok(())
 }
 
 /// Parses and evaluates a single expression file, writing the result to `sink`.
