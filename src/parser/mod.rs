@@ -238,7 +238,19 @@ mod tests {
 
     use super::*;
     use crate::parser::printer::AstPrinter;
+    use crate::parser::stmt::StmtNode;
     use crate::scanner::{ScanItem, Scanner};
+
+    fn scan(input: &str) -> Vec<Token> {
+        Scanner::new(input)
+            .scan_tokens()
+            .filter_map(|r| match r {
+                Ok(ScanItem::Token(tkn)) => Some(tkn),
+                Ok(ScanItem::Ignore) => None,
+                Err(_) => None,
+            })
+            .collect()
+    }
 
     #[rstest]
     #[case(r#""bar"!="hello""#, "(!= bar hello)")]
@@ -284,18 +296,51 @@ mod tests {
     #[case("false", "false")]
     #[case("nil", "nil")]
     fn test_parser(#[case] input: &str, #[case] expected_output: &str) {
-        let tokens = Scanner::new(&input)
-            .scan_tokens()
-            .filter_map(|r| match r {
-                Ok(ScanItem::Token(tkn)) => Some(tkn),
-                Ok(ScanItem::Ignore) => None,
-                Err(_) => None,
-            })
-            .collect::<Vec<_>>();
-
+        let tokens = scan(input);
         let mut parser = Parser::from(tokens);
         let expr = parser.expression().unwrap();
+
         let expr_str = AstPrinter.print(&expr);
         assert_eq!(expected_output, expr_str)
+    }
+
+    fn parse_program(input: &str) -> Result<Vec<StmtNode>, StaticError> {
+        let tokens = scan(input);
+        let mut parser = Parser::from(tokens);
+        parser.parse()
+    }
+
+    fn render_stmt(stmt: &StmtNode) -> String {
+        match stmt {
+            StmtNode::Print(print) => format!("print {}", AstPrinter.print(&*print.expr)),
+            StmtNode::Expression(expression) => AstPrinter.print(&*expression.expr),
+        }
+    }
+
+    #[test]
+    fn test_parse_multiple_statements_single_line_and_multiline() {
+        let program = r#"
+            print "baz"; print false;
+            print true;
+            print "bar"; print 76;
+        "#;
+
+        let statements = parse_program(program).expect("program should parse");
+        let actual = statements.iter().map(render_stmt).collect::<Vec<_>>();
+        let expected = vec![
+            "print baz",
+            "print false",
+            "print true",
+            "print bar",
+            "print 76.0",
+        ];
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn test_parse_print_requires_expression() {
+        let err = parse_program("print;").expect_err("expected parse error");
+        assert_eq!("[line 1] Error at ';': Expect expression", err.to_string());
     }
 }

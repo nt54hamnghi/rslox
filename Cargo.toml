@@ -13,6 +13,7 @@ thiserror = "1.0.38"
 
 [dev-dependencies]
 rstest = "0.26.1"
+tempdir = "0.3.7"
 
 [lints.rust]
 unsafe_code = { priority = 5, level = "forbid" }
