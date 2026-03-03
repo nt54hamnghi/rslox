@@ -1,4 +1,5 @@
-use crate::{Value, scanner::token::Token};
+use crate::Value;
+use crate::scanner::token::Token;
 
 pub trait Expr {
     fn accept<V: Visitor>(&self, v: &V) -> V::Output;
@@ -13,27 +14,27 @@ pub trait Visitor {
 }
 
 #[derive(Debug)]
-pub enum AstNode {
+pub enum ExprNode {
     Grouping(Grouping),
     Binary(Binary),
     Unary(Unary),
     Literal(Literal),
 }
 
-impl Expr for AstNode {
+impl Expr for ExprNode {
     fn accept<V: Visitor>(&self, v: &V) -> V::Output {
         match self {
-            AstNode::Grouping(expr) => expr.accept(v),
-            AstNode::Binary(expr) => expr.accept(v),
-            AstNode::Unary(expr) => expr.accept(v),
-            AstNode::Literal(expr) => expr.accept(v),
+            ExprNode::Grouping(expr) => expr.accept(v),
+            ExprNode::Binary(expr) => expr.accept(v),
+            ExprNode::Unary(expr) => expr.accept(v),
+            ExprNode::Literal(expr) => expr.accept(v),
         }
     }
 }
 
 #[derive(Debug)]
 pub struct Grouping {
-    pub expression: Box<AstNode>,
+    pub expression: Box<ExprNode>,
 }
 
 impl Expr for Grouping {
@@ -43,14 +44,14 @@ impl Expr for Grouping {
 }
 
 impl Grouping {
-    pub fn new(expression: AstNode) -> Self {
+    pub fn new(expression: ExprNode) -> Self {
         Self {
             expression: Box::new(expression),
         }
     }
 }
 
-impl From<Grouping> for AstNode {
+impl From<Grouping> for ExprNode {
     fn from(grouping: Grouping) -> Self {
         Self::Grouping(grouping)
     }
@@ -58,9 +59,9 @@ impl From<Grouping> for AstNode {
 
 #[derive(Debug)]
 pub struct Binary {
-    pub left: Box<AstNode>,
+    pub left: Box<ExprNode>,
     pub operator: Token,
-    pub right: Box<AstNode>,
+    pub right: Box<ExprNode>,
 }
 
 impl Expr for Binary {
@@ -70,7 +71,7 @@ impl Expr for Binary {
 }
 
 impl Binary {
-    pub fn new(left: AstNode, operator: Token, right: AstNode) -> Self {
+    pub fn new(left: ExprNode, operator: Token, right: ExprNode) -> Self {
         Self {
             left: Box::new(left),
             operator,
@@ -79,7 +80,7 @@ impl Binary {
     }
 }
 
-impl From<Binary> for AstNode {
+impl From<Binary> for ExprNode {
     fn from(binary: Binary) -> Self {
         Self::Binary(binary)
     }
@@ -88,7 +89,7 @@ impl From<Binary> for AstNode {
 #[derive(Debug)]
 pub struct Unary {
     pub operator: Token,
-    pub right: Box<AstNode>,
+    pub right: Box<ExprNode>,
 }
 
 impl Expr for Unary {
@@ -98,7 +99,7 @@ impl Expr for Unary {
 }
 
 impl Unary {
-    pub fn new(operator: Token, right: AstNode) -> Self {
+    pub fn new(operator: Token, right: ExprNode) -> Self {
         Self {
             operator,
             right: Box::new(right),
@@ -106,7 +107,7 @@ impl Unary {
     }
 }
 
-impl From<Unary> for AstNode {
+impl From<Unary> for ExprNode {
     fn from(unary: Unary) -> Self {
         Self::Unary(unary)
     }
@@ -123,7 +124,7 @@ impl Expr for Literal {
     }
 }
 
-impl From<Literal> for AstNode {
+impl From<Literal> for ExprNode {
     fn from(value: Literal) -> Self {
         Self::Literal(value)
     }

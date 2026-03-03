@@ -3,15 +3,13 @@ use std::vec;
 
 use crate::Value;
 use crate::error::Report;
-use crate::parser::expr::{AstNode, Binary, Grouping, Literal, Unary};
-use crate::scanner::token::TokenType::{
-    Bang, BangEqual, Eof, EqualEqual, False, Greater, GreaterEqual, LeftParen, Less, LessEqual,
-    Minus, Nil, Number, Plus, RightParen, Slash, Star, String as Str, True,
-};
+use crate::parser::expr::{Binary, ExprNode, Grouping, Literal, Unary};
+use crate::parser::stmt::{Expression, Print, StmtNode};
 use crate::scanner::token::{Token, TokenType};
 
 pub mod expr;
 pub mod printer;
+pub mod stmt;
 
 pub struct Parser {
     tokens: Peekable<vec::IntoIter<Token>>,
@@ -26,20 +24,52 @@ impl From<Vec<Token>> for Parser {
 }
 
 impl Parser {
-    pub fn parse(&mut self) -> Result<AstNode, Report> {
+    pub fn parse(&mut self) -> Result<Vec<StmtNode>, Report> {
+        let mut stmts = Vec::new();
+
+        while !self.is_at_end() {
+            let s = self.statement()?;
+            stmts.push(s);
+        }
+
+        Ok(stmts)
+    }
+
+    pub fn parse_expression(&mut self) -> Result<ExprNode, Report> {
         self.expression()
     }
 
+    fn statement(&mut self) -> Result<StmtNode, Report> {
+        if self.next_if(TokenType::Print).is_some() {
+            return self.print_statement();
+        }
+        self.expression_statement()
+    }
+
+    fn print_statement(&mut self) -> Result<StmtNode, Report> {
+        let expr = self.expression()?;
+        self.expect_semicolon()?;
+
+        Ok(Print::new(expr).into())
+    }
+
+    fn expression_statement(&mut self) -> Result<StmtNode, Report> {
+        let expr = self.expression()?;
+        self.expect_semicolon()?;
+
+        Ok(Expression::new(expr).into())
+    }
+
     /// expression → equality ;
-    fn expression(&mut self) -> Result<AstNode, Report> {
+    fn expression(&mut self) -> Result<ExprNode, Report> {
         self.equality()
     }
 
     /// equality → comparison ( ( "!=" | "==" ) comparison )* ;
-    fn equality(&mut self) -> Result<AstNode, Report> {
+    fn equality(&mut self) -> Result<ExprNode, Report> {
         let mut expr = self.comparison()?;
 
-        while let Some(operator) = self.next_match(&[BangEqual, EqualEqual]) {
+        while let Some(operator) = self.next_match(&[TokenType::BangEqual, TokenType::EqualEqual]) {
             let right = self.comparison()?;
             expr = Binary::new(expr, operator, right).into();
         }
@@ -48,10 +78,15 @@ impl Parser {
     }
 
     /// comparison → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
-    fn comparison(&mut self) -> Result<AstNode, Report> {
+    fn comparison(&mut self) -> Result<ExprNode, Report> {
         let mut expr = self.term()?;
 
-        while let Some(operator) = self.next_match(&[Greater, GreaterEqual, Less, LessEqual]) {
+        while let Some(operator) = self.next_match(&[
+            TokenType::Greater,
+            TokenType::GreaterEqual,
+            TokenType::Less,
+            TokenType::LessEqual,
+        ]) {
             let right = self.term()?;
             expr = Binary::new(expr, operator, right).into();
         }
@@ -60,10 +95,10 @@ impl Parser {
     }
 
     /// term → factor ( ( "-" | "+" ) factor )* ;
-    fn term(&mut self) -> Result<AstNode, Report> {
+    fn term(&mut self) -> Result<ExprNode, Report> {
         let mut expr = self.factor()?;
 
-        while let Some(operator) = self.next_match(&[Minus, Plus]) {
+        while let Some(operator) = self.next_match(&[TokenType::Minus, TokenType::Plus]) {
             let right = self.factor()?;
             expr = Binary::new(expr, operator, right).into();
         }
@@ -72,10 +107,10 @@ impl Parser {
     }
 
     /// factor → unary ( ( "/" | "*" ) unary )* ;
-    fn factor(&mut self) -> Result<AstNode, Report> {
+    fn factor(&mut self) -> Result<ExprNode, Report> {
         let mut expr = self.unary()?;
 
-        while let Some(operator) = self.next_match(&[Slash, Star]) {
+        while let Some(operator) = self.next_match(&[TokenType::Slash, TokenType::Star]) {
             let right = self.unary()?;
             expr = Binary::new(expr, operator, right).into();
         }
@@ -84,8 +119,8 @@ impl Parser {
     }
 
     /// unary → ( "!" | "-" ) unary | primary ;
-    fn unary(&mut self) -> Result<AstNode, Report> {
-        if let Some(operator) = self.next_match(&[Bang, Minus]) {
+    fn unary(&mut self) -> Result<ExprNode, Report> {
+        if let Some(operator) = self.next_match(&[TokenType::Bang, TokenType::Minus]) {
             let right = self.unary()?;
             return Ok(Unary::new(operator, right).into());
         }
@@ -94,30 +129,30 @@ impl Parser {
     }
 
     /// primary → NUMBER | STRING | "true" | "false" | "nil"| "(" expression ")" ;
-    fn primary(&mut self) -> Result<AstNode, Report> {
-        if self.next_if(True).is_some() {
+    fn primary(&mut self) -> Result<ExprNode, Report> {
+        if self.next_if(TokenType::True).is_some() {
             let val = Value::from(true);
             return Ok(Literal::from(val).into());
         }
 
-        if self.next_if(False).is_some() {
+        if self.next_if(TokenType::False).is_some() {
             let val = Value::from(false);
             return Ok(Literal::from(val).into());
         }
 
-        if self.next_if(Nil).is_some() {
+        if self.next_if(TokenType::Nil).is_some() {
             let val = Value::Nil;
             return Ok(Literal::from(val).into());
         }
 
-        if let Some(token) = self.next_match(&[Number, Str]) {
+        if let Some(token) = self.next_match(&[TokenType::Number, TokenType::String]) {
             let value = token.literal.expect("literal value for token");
             return Ok(Literal::from(value).into());
         }
 
-        if self.next_if(LeftParen).is_some() {
+        if self.next_if(TokenType::LeftParen).is_some() {
             let expr = self.expression()?;
-            self.next_ok(RightParen, "Expect ')' after expression".into())?;
+            self.next_ok(TokenType::RightParen, "Expect ')' after expression".into())?;
             return Ok(Grouping::new(expr).into());
         }
 
@@ -161,12 +196,21 @@ impl Parser {
         self.next_if(tt).ok_or(self.error(message))
     }
 
+    /// Consumes a required trailing semicolon token.
+    ///
+    /// Returns:
+    /// - `Ok(Token)` when the next token is `;`, consuming it.
+    /// - `Err(Report)` when `;` is missing.
+    fn expect_semicolon(&mut self) -> Result<Token, Report> {
+        self.next_ok(TokenType::Semicolon, "Expect ';' after value.".into())
+    }
+
     /// Checks if the parser has reached the end of the token stream.
     ///
     /// Returns `true` if the current token is an EOF token or
     /// there are no more tokens in the token list.
     fn is_at_end(&mut self) -> bool {
-        self.tokens.peek().is_none_or(|t| t.typ == Eof)
+        self.tokens.peek().is_none_or(|t| t.typ == TokenType::Eof)
     }
 
     fn error(&mut self, message: String) -> Report {
@@ -177,10 +221,11 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
     use crate::parser::printer::AstPrinter;
     use crate::scanner::{ScanItem, Scanner};
-    use rstest::rstest;
 
     #[rstest]
     #[case(r#""bar"!="hello""#, "(!= bar hello)")]
@@ -236,7 +281,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         let mut parser = Parser::from(tokens);
-        let expr = parser.parse().unwrap();
+        let expr = parser.expression().unwrap();
         let expr_str = AstPrinter.print(&expr);
         assert_eq!(expected_output, expr_str)
     }

@@ -1,49 +1,64 @@
 #![allow(unused_variables)]
-use std::fs;
-use std::fs::File;
-use std::fs::OpenOptions;
-use std::io;
+use std::fs::{File, OpenOptions};
 use std::path::PathBuf;
+use std::{fs, io};
 
 use clap::Parser as _;
-use codecrafters_interpreter::cli;
+use codecrafters_interpreter::cli::{Args, Command};
 use codecrafters_interpreter::interpreter::Interpreter;
 use codecrafters_interpreter::parser::Parser;
-use codecrafters_interpreter::parser::expr::AstNode;
+use codecrafters_interpreter::parser::expr::ExprNode;
 use codecrafters_interpreter::parser::printer::AstPrinter;
-use codecrafters_interpreter::scanner::ScanItem;
-use codecrafters_interpreter::scanner::Scanner;
 use codecrafters_interpreter::scanner::token::Token;
+use codecrafters_interpreter::scanner::{ScanItem, Scanner};
 
+/// Parses CLI arguments and dispatches to the selected subcommand.
 fn main() {
-    let args = cli::Args::parse();
+    let args = Args::parse();
 
     match args.subcommand {
-        cli::Command::Tokenize { filename } => {
+        Command::Tokenize { filename } => {
             tokenize(filename, io::stdout());
         }
-        cli::Command::Parse { filename } => {
+        Command::Parse { filename } => {
             parse(filename, io::stdout());
         }
-        cli::Command::Evaluate { filename } => {
-            evaluate(filename);
+        Command::Evaluate { filename } => {
+            evaluate(filename, io::stdout());
         }
+        Command::Run { filename } => run(filename),
     };
 }
 
-fn evaluate(filename: PathBuf) {
+fn run(filename: PathBuf) {
+    let tokens = tokenize(filename, null());
+    let mut parser = Parser::from(tokens);
+    let ast = parser.parse().unwrap();
+    Interpreter.interpret(&ast).unwrap();
+}
+
+/// Parses and evaluates a single expression file, writing the result to `sink`.
+///
+/// Exits with code `70` if runtime evaluation fails.
+fn evaluate(filename: PathBuf, mut sink: impl io::Write) {
     let expr = parse(filename, null());
-    let interpreter = Interpreter;
-    if let Err(err) = interpreter.interpret(&expr) {
-        eprintln!("{err}");
-        std::process::exit(70);
+    match Interpreter.evaluate(&expr) {
+        Ok(val) => writeln!(sink, "{}", val).unwrap(),
+        Err(err) => {
+            eprintln!("{err}");
+            std::process::exit(70);
+        }
     }
 }
 
-fn parse(filename: PathBuf, mut sink: impl io::Write) -> AstNode {
+/// Tokenizes and parses a single expression file, prints its AST form to `sink`,
+/// and returns the parsed expression node.
+///
+/// Exits with code `65` if parsing fails.
+fn parse(filename: PathBuf, mut sink: impl io::Write) -> ExprNode {
     let tokens = tokenize(filename, null());
     let mut parser = Parser::from(tokens);
-    match parser.parse() {
+    match parser.parse_expression() {
         Ok(expr) => {
             writeln!(sink, "{}", AstPrinter.print(&expr)).unwrap();
             expr
@@ -55,6 +70,10 @@ fn parse(filename: PathBuf, mut sink: impl io::Write) -> AstNode {
     }
 }
 
+/// Scans tokens from `filename`, writing each token to `sink`, and returns all
+/// successfully scanned tokens.
+///
+/// Exits with code `65` if any scan error occurs.
 fn tokenize(filename: PathBuf, mut sink: impl io::Write) -> Vec<Token> {
     let content = read_file(filename);
 
@@ -83,6 +102,9 @@ fn tokenize(filename: PathBuf, mut sink: impl io::Write) -> Vec<Token> {
     tokens
 }
 
+/// Reads an input file into a string.
+///
+/// Exits with code `1` when the file cannot be read.
 fn read_file(filename: PathBuf) -> String {
     let Ok(file_contents) = fs::read_to_string(&filename) else {
         eprintln!("Failed to read file {}", filename.display());
@@ -91,6 +113,7 @@ fn read_file(filename: PathBuf) -> String {
     file_contents
 }
 
+/// Returns a writable sink that discards all bytes (`/dev/null`).
 fn null() -> File {
     OpenOptions::new().write(true).open("/dev/null").unwrap()
 }

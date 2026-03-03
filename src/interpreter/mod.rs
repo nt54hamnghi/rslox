@@ -2,7 +2,8 @@ use std::ops::Not;
 
 use crate::Value;
 use crate::interpreter::error::RuntimeError;
-use crate::parser::expr::{AstNode, Binary, Expr, Grouping, Literal, Unary, Visitor};
+use crate::parser::expr::{self, Binary, Expr, ExprNode, Grouping, Literal, Unary};
+use crate::parser::stmt::{self, Stmt, StmtNode};
 use crate::scanner::token::{Token, TokenType};
 
 /// Error types returned when expression evaluation fails at runtime.
@@ -34,21 +35,44 @@ fn check_number_operands(left: Value, right: Value, op: Token) -> Result<(f64, f
 pub struct Interpreter;
 
 impl Interpreter {
-    pub fn interpret(&self, expr: &AstNode) -> Result<(), RuntimeError> {
-        let v = self.evaluate(expr)?;
-        println!("{v}");
+    pub fn interpret(&self, program: &[StmtNode]) -> Result<(), RuntimeError> {
+        for statement in program {
+            self.execute(statement)?;
+        }
         Ok(())
+    }
+
+    /// Executes a single statement node.
+    ///
+    /// Returns a [`RuntimeError`] if execution of the statement fails at runtime.
+    pub fn execute(&self, stmt: &StmtNode) -> Result<(), RuntimeError> {
+        Stmt::accept(stmt, self)
     }
 
     /// Evaluates a single expression tree.
     ///
     /// Returns the resulting value or a runtime error when evaluation fails.
-    fn evaluate(&self, expr: &AstNode) -> Result<Value, RuntimeError> {
-        expr.accept(self)
+    pub fn evaluate(&self, expr: &ExprNode) -> Result<Value, RuntimeError> {
+        Expr::accept(expr, self)
     }
 }
 
-impl Visitor for Interpreter {
+impl stmt::Visitor for Interpreter {
+    type Output = Result<(), RuntimeError>;
+
+    fn visit_print_stmt(&self, stmt: &stmt::Print) -> Self::Output {
+        let value = self.evaluate(&stmt.expr)?;
+        println!("{value}");
+        Ok(())
+    }
+
+    fn visit_expression_stmt(&self, stmt: &stmt::Expression) -> Self::Output {
+        self.evaluate(&stmt.expr)?;
+        Ok(())
+    }
+}
+
+impl expr::Visitor for Interpreter {
     type Output = Result<Value, RuntimeError>;
 
     /// Produces the value represented by a literal expression.
@@ -147,10 +171,11 @@ impl Visitor for Interpreter {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
     use crate::parser::Parser;
     use crate::scanner::{ScanItem, Scanner};
-    use rstest::rstest;
 
     fn eval_expr(input: &str) -> Result<Value, RuntimeError> {
         let tokens = Scanner::new(input)
@@ -163,7 +188,9 @@ mod tests {
             .collect::<Vec<_>>();
 
         let mut parser = Parser::from(tokens);
-        let expr = parser.parse().expect("Expected a valid expression");
+        let expr = parser
+            .parse_expression()
+            .expect("Expected a valid expression");
         Interpreter.evaluate(&expr)
     }
 

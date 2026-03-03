@@ -267,8 +267,9 @@ impl<'src> TokenStream<'src> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case("return", vec![

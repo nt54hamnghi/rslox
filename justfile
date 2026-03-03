@@ -4,9 +4,15 @@ default:
 
 # run a lox program
 run path="test.lox":
-    @./your_program.sh parse {{ path }}
+    @./your_program.sh run {{ path }}
 
 alias r := run
+
+# format code
+fmt:
+    cargo +nightly fmt
+
+alias f := fmt
 
 # test locally with cargo
 test-local:
@@ -22,6 +28,7 @@ alias tr := test-remote
 
 # submit to codecrafters
 submit message:
+    @cargo +nightly fmt
     @jj describe --message "{{ message }}"
     @jj bookmark move master
     @jj git push --bookmark master --remote me
