@@ -39,8 +39,9 @@ fn main() {
 fn run(filename: PathBuf) -> Result<(), Report> {
     let tokens = tokenize(filename, null());
     let mut parser = Parser::from(tokens);
-    let ast = parser.parse();
-    Interpreter.interpret(&ast)?;
+    let ast = parser.parse()?;
+    let mut interpreter = Interpreter::new();
+    interpreter.interpret(&ast)?;
 
     Ok(())
 }
@@ -50,7 +51,8 @@ fn run(filename: PathBuf) -> Result<(), Report> {
 /// Exits with code `70` if runtime evaluation fails.
 fn evaluate(filename: PathBuf, mut sink: impl io::Write) {
     let expr = parse(filename, null());
-    match Interpreter.evaluate(&expr) {
+    let interpreter = Interpreter::new();
+    match interpreter.evaluate(&expr) {
         Ok(val) => writeln!(sink, "{}", val).unwrap(),
         Err(err) => {
             eprintln!("{err}");

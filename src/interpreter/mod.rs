@@ -1,12 +1,13 @@
 use std::ops::Not;
 
 use crate::Value;
+use crate::interpreter::environment::Environment;
 use crate::interpreter::error::RuntimeError;
 use crate::parser::expr::{self, Binary, Expr, ExprNode};
 use crate::parser::stmt::{self, Stmt, StmtNode};
 use crate::scanner::token::{Token, TokenType};
 
-/// Error types returned when expression evaluation fails at runtime.
+mod environment;
 pub mod error;
 
 impl Value {
@@ -31,11 +32,19 @@ fn check_number_operands(left: Value, right: Value, op: Token) -> Result<(f64, f
     Ok((a, b))
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct Interpreter;
+#[derive(Debug, Clone)]
+pub struct Interpreter {
+    environment: Environment,
+}
 
 impl Interpreter {
-    pub fn interpret(&self, program: &[StmtNode]) -> Result<(), RuntimeError> {
+    pub fn new() -> Self {
+        Self {
+            environment: Environment::new(),
+        }
+    }
+
+    pub fn interpret(&mut self, program: &[StmtNode]) -> Result<(), RuntimeError> {
         for statement in program {
             self.execute(statement)?;
         }
@@ -45,7 +54,7 @@ impl Interpreter {
     /// Executes a single statement node.
     ///
     /// Returns a [`RuntimeError`] if execution of the statement fails at runtime.
-    pub fn execute(&self, stmt: &StmtNode) -> Result<(), RuntimeError> {
+    pub fn execute(&mut self, stmt: &StmtNode) -> Result<(), RuntimeError> {
         Stmt::accept(stmt, self)
     }
 
@@ -71,8 +80,17 @@ impl stmt::Visitor for Interpreter {
         Ok(())
     }
 
-    fn visit_var_stmt(&self, stmt: &stmt::Var) -> Self::Output {
-        todo!()
+    fn visit_var_stmt(&mut self, stmt: &stmt::Var) -> Self::Output {
+        let value = stmt
+            .initializer
+            .as_deref()
+            .map(|e| self.evaluate(e))
+            .transpose()?
+            .unwrap_or(Value::Nil);
+
+        self.environment.define(stmt.name.lexeme.clone(), value);
+
+        Ok(())
     }
 }
 
@@ -116,7 +134,7 @@ impl expr::Visitor for Interpreter {
     }
 
     fn visit_variable_expr(&self, expr: &expr::Variable) -> Self::Output {
-        todo!()
+        self.environment.get(&expr.name)
     }
 
     /// Evaluates binary operators including arithmetic, comparison, and equality.
@@ -199,7 +217,8 @@ mod tests {
         let expr = parser
             .parse_expression()
             .expect("Expected a valid expression");
-        Interpreter.evaluate(&expr)
+        let interpreter = Interpreter::new();
+        interpreter.evaluate(&expr)
     }
 
     fn interpret_program(input: &str) -> Result<(), RuntimeError> {
@@ -213,8 +232,9 @@ mod tests {
             .collect::<Vec<_>>();
 
         let mut parser = Parser::from(tokens);
-        let program = parser.parse();
-        Interpreter.interpret(&program)
+        let program = parser.parse().expect("Expected a valid program");
+        let mut interpreter = Interpreter::new();
+        interpreter.interpret(&program)
     }
 
     #[rstest]

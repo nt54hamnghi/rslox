@@ -29,20 +29,15 @@ impl Parser {
     /// Returns:
     /// - `Ok(Vec<StmtNode>)` with all parsed statements.
     /// - `Err(Report)` when any statement cannot be parsed.
-    pub fn parse(&mut self) -> Vec<StmtNode> {
+    pub fn parse(&mut self) -> Result<Vec<StmtNode>, StaticError> {
         let mut stmts = Vec::new();
 
         while !self.is_at_end() {
-            match self.declaration() {
-                Ok(s) => stmts.push(s),
-                Err(e) => {
-                    eprintln!("{e}");
-                    self.synchronize();
-                }
-            }
+            let s = self.declaration()?;
+            stmts.push(s);
         }
 
-        stmts
+        Ok(stmts)
     }
 
     /// Parses a single expression from the current parser position.
@@ -57,6 +52,7 @@ impl Parser {
         self.expression()
     }
 
+    #[allow(unused)]
     fn synchronize(&mut self) {
         while !self.is_at_end() {
             if self.next_if(TokenType::Semicolon).is_some() {
@@ -360,7 +356,7 @@ mod tests {
         assert_eq!(expected_output, expr_str)
     }
 
-    fn parse_program(input: &str) -> Vec<StmtNode> {
+    fn parse_program(input: &str) -> Result<Vec<StmtNode>, StaticError> {
         let tokens = scan(input);
         let mut parser = Parser::from(tokens);
         parser.parse()
@@ -382,7 +378,7 @@ mod tests {
             print "bar"; print 76;
         "#;
 
-        let statements = parse_program(program);
+        let statements = parse_program(program).expect("Expected a valid program");
         let actual = statements.iter().map(render_stmt).collect::<Vec<_>>();
         let expected = vec![
             "print baz",
@@ -393,5 +389,11 @@ mod tests {
         ];
 
         assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn test_parse_print_requires_expression() {
+        let err = parse_program("print;").expect_err("expected parse error");
+        assert_eq!("[line 1] Error at ';': Expect expression", err.to_string());
     }
 }

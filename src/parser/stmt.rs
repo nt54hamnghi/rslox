@@ -2,14 +2,14 @@ use crate::parser::expr::ExprNode;
 use crate::scanner::token::Token;
 
 pub trait Stmt {
-    fn accept<V: Visitor>(&self, visitor: &V) -> V::Output;
+    fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output;
 }
 
 pub trait Visitor {
     type Output;
     fn visit_print_stmt(&self, stmt: &Print) -> Self::Output;
     fn visit_expression_stmt(&self, stmt: &Expression) -> Self::Output;
-    fn visit_var_stmt(&self, stmt: &Var) -> Self::Output;
+    fn visit_var_stmt(&mut self, stmt: &Var) -> Self::Output;
 }
 
 #[derive(Debug)]
@@ -20,7 +20,7 @@ pub enum StmtNode {
 }
 
 impl Stmt for StmtNode {
-    fn accept<V: Visitor>(&self, visitor: &V) -> V::Output {
+    fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
         match self {
             StmtNode::Print(print) => print.accept(visitor),
             StmtNode::Expression(expression) => expression.accept(visitor),
@@ -35,7 +35,7 @@ pub struct Print {
 }
 
 impl Stmt for Print {
-    fn accept<V: Visitor>(&self, visitor: &V) -> V::Output {
+    fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_print_stmt(&self)
     }
 }
@@ -61,7 +61,7 @@ pub struct Var {
 }
 
 impl Stmt for Var {
-    fn accept<V: Visitor>(&self, visitor: &V) -> V::Output {
+    fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_var_stmt(&self)
     }
 }
@@ -87,7 +87,7 @@ pub struct Expression {
 }
 
 impl Stmt for Expression {
-    fn accept<V: Visitor>(&self, visitor: &V) -> V::Output {
+    fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_expression_stmt(&self)
     }
 }
