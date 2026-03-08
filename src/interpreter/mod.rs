@@ -194,6 +194,21 @@ mod tests {
         Interpreter.evaluate(&expr)
     }
 
+    fn interpret_program(input: &str) -> Result<(), RuntimeError> {
+        let tokens = Scanner::new(input)
+            .scan_tokens()
+            .filter_map(|r| match r {
+                Ok(ScanItem::Token(tkn)) => Some(tkn),
+                Ok(ScanItem::Ignore) => None,
+                Err(_) => None,
+            })
+            .collect::<Vec<_>>();
+
+        let mut parser = Parser::from(tokens);
+        let program = parser.parse().expect("Expected a valid program");
+        Interpreter.interpret(&program)
+    }
+
     #[rstest]
     #[case("true", Value::Boolean(true))]
     #[case("false", Value::Boolean(false))]
@@ -342,5 +357,53 @@ mod tests {
     fn test_interpreter_runtime_errors_relational_operators(#[case] input: &str) {
         let err = eval_expr(input).expect_err("Expected evaluation to fail");
         assert_eq!("Operands must be numbers.\n[line 1]", err.to_string());
+    }
+
+    #[rstest]
+    #[case(
+        r#"
+            (77 + 88 - 51) > (64 - 77) * 2;
+            false == false;
+            ("baz" == "hello") == ("world" != "foo");
+        "#
+    )]
+    #[case(
+        r#"
+            51 - 60 >= -76 * 2 / 76 + 29;
+            false == false;
+            ("baz" == "hello") == ("world" != "foo");
+            print false;
+        "#
+    )]
+    fn test_interpreter_expression_statements_execute_without_runtime_errors(
+        #[case] program: &str,
+    ) {
+        let result = interpret_program(program);
+        assert!(result.is_ok(), "program should execute successfully");
+    }
+
+    #[rstest]
+    #[case(
+        r#"
+            // This program tests that + only supports number+number or string+string
+            print "the expression below is invalid";
+            39 + "world";
+            print "this should not be printed";
+        "#,
+        "Operands must be numbers.\n[line 4]"
+    )]
+    #[case(
+        r#"
+            print "62" + "foo";
+            print true * (64 + 13);
+        "#,
+        "Operands must be numbers.\n[line 3]"
+    )]
+    fn test_interpreter_runtime_errors_from_expression_statements(
+        #[case] program: &str,
+        #[case] expected_error: &str,
+    ) {
+        let err = interpret_program(program).expect_err("expected runtime error");
+        assert_eq!(expected_error, err.to_string());
     }
 }
