@@ -2,7 +2,7 @@ use std::ops::Not;
 
 use crate::Value;
 use crate::interpreter::error::RuntimeError;
-use crate::parser::expr::{self, Binary, Expr, ExprNode, Grouping, Literal, Unary};
+use crate::parser::expr::{self, Binary, Expr, ExprNode};
 use crate::parser::stmt::{self, Stmt, StmtNode};
 use crate::scanner::token::{Token, TokenType};
 
@@ -70,25 +70,29 @@ impl stmt::Visitor for Interpreter {
         self.evaluate(&stmt.expr)?;
         Ok(())
     }
+
+    fn visit_var_stmt(&self, stmt: &stmt::Var) -> Self::Output {
+        todo!()
+    }
 }
 
 impl expr::Visitor for Interpreter {
     type Output = Result<Value, RuntimeError>;
 
     /// Produces the value represented by a literal expression.
-    fn visit_literal_expr(&self, expr: &Literal) -> Self::Output {
+    fn visit_literal_expr(&self, expr: &expr::Literal) -> Self::Output {
         Ok(expr.value.clone())
     }
 
     /// Evaluates the expression inside grouping parentheses.
-    fn visit_grouping_expr(&self, expr: &Grouping) -> Self::Output {
+    fn visit_grouping_expr(&self, expr: &expr::Grouping) -> Self::Output {
         self.evaluate(&expr.expression)
     }
 
     /// Evaluates unary operators such as logical negation and numeric negation.
     ///
     /// Returns an error when numeric negation is applied to a non-number.
-    fn visit_unary_expr(&self, expr: &Unary) -> Self::Output {
+    fn visit_unary_expr(&self, expr: &expr::Unary) -> Self::Output {
         let right = self.evaluate(&expr.right)?;
 
         match expr.operator.typ {
@@ -109,6 +113,10 @@ impl expr::Visitor for Interpreter {
                 expr.operator.typ
             ),
         }
+    }
+
+    fn visit_variable_expr(&self, expr: &expr::Variable) -> Self::Output {
+        todo!()
     }
 
     /// Evaluates binary operators including arithmetic, comparison, and equality.
@@ -205,7 +213,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         let mut parser = Parser::from(tokens);
-        let program = parser.parse().expect("Expected a valid program");
+        let program = parser.parse();
         Interpreter.interpret(&program)
     }
 

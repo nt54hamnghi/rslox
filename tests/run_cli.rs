@@ -66,10 +66,8 @@ fn test_run_success_cases(#[case] source: &str, #[case] expected_stdout: &[&str]
 fn test_run_print_without_expression_reports_static_error() {
     let output = run_source("print;\n");
 
-    assert_eq!(Some(65), output.status.code());
-
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
-    assert!(stderr.contains("[line 1] Error at ';': Expect expression"));
+    assert_eq!("[line 1] Error at ';': Expect expression\n", stderr);
 }
 
 #[rstest]

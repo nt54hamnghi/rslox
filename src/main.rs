@@ -39,7 +39,7 @@ fn main() {
 fn run(filename: PathBuf) -> Result<(), Report> {
     let tokens = tokenize(filename, null());
     let mut parser = Parser::from(tokens);
-    let ast = parser.parse()?;
+    let ast = parser.parse();
     Interpreter.interpret(&ast)?;
 
     Ok(())

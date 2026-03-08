@@ -3,8 +3,8 @@ use std::vec;
 
 use crate::Value;
 use crate::error::StaticError;
-use crate::parser::expr::{Binary, ExprNode, Grouping, Literal, Unary};
-use crate::parser::stmt::{Expression, Print, StmtNode};
+use crate::parser::expr::{Binary, ExprNode, Grouping, Literal, Unary, Variable};
+use crate::parser::stmt::{Expression, Print, StmtNode, Var};
 use crate::scanner::token::{Token, TokenType};
 
 pub mod expr;
@@ -29,15 +29,20 @@ impl Parser {
     /// Returns:
     /// - `Ok(Vec<StmtNode>)` with all parsed statements.
     /// - `Err(Report)` when any statement cannot be parsed.
-    pub fn parse(&mut self) -> Result<Vec<StmtNode>, StaticError> {
+    pub fn parse(&mut self) -> Vec<StmtNode> {
         let mut stmts = Vec::new();
 
         while !self.is_at_end() {
-            let s = self.statement()?;
-            stmts.push(s);
+            match self.declaration() {
+                Ok(s) => stmts.push(s),
+                Err(e) => {
+                    eprintln!("{e}");
+                    self.synchronize();
+                }
+            }
         }
 
-        Ok(stmts)
+        stmts
     }
 
     /// Parses a single expression from the current parser position.
@@ -50,6 +55,53 @@ impl Parser {
     /// - `Err(Report)` if expression parsing fails.
     pub fn parse_expression(&mut self) -> Result<ExprNode, StaticError> {
         self.expression()
+    }
+
+    fn synchronize(&mut self) {
+        while !self.is_at_end() {
+            if self.next_if(TokenType::Semicolon).is_some() {
+                return;
+            }
+
+            if matches!(
+                self.tokens
+                    .peek()
+                    .expect("loop guard ensures next token exists and is not EOF")
+                    .typ,
+                TokenType::Class
+                    | TokenType::Fun
+                    | TokenType::Var
+                    | TokenType::For
+                    | TokenType::If
+                    | TokenType::While
+                    | TokenType::Return
+                    | TokenType::Print
+            ) {
+                return;
+            }
+
+            self.tokens.next();
+        }
+    }
+
+    fn declaration(&mut self) -> Result<StmtNode, StaticError> {
+        if self.next_if(TokenType::Var).is_some() {
+            return self.var_declaration();
+        }
+        self.statement()
+    }
+
+    fn var_declaration(&mut self) -> Result<StmtNode, StaticError> {
+        let name = self.next_ok(TokenType::Identifier, "Expect variable name.".into())?;
+
+        let mut init = None;
+        if self.next_if(TokenType::Equal).is_some() {
+            init = Some(self.expression()?);
+        }
+
+        self.expect_semicolon()?;
+
+        Ok(Var::new(name, init).into())
     }
 
     fn statement(&mut self) -> Result<StmtNode, StaticError> {
@@ -167,6 +219,10 @@ impl Parser {
             let expr = self.expression()?;
             self.next_ok(TokenType::RightParen, "Expect ')' after expression".into())?;
             return Ok(Grouping::new(expr).into());
+        }
+
+        if let Some(name) = self.next_if(TokenType::Identifier) {
+            return Ok(Variable::new(name).into());
         }
 
         Err(self.error("Expect expression".into()))
@@ -304,7 +360,7 @@ mod tests {
         assert_eq!(expected_output, expr_str)
     }
 
-    fn parse_program(input: &str) -> Result<Vec<StmtNode>, StaticError> {
+    fn parse_program(input: &str) -> Vec<StmtNode> {
         let tokens = scan(input);
         let mut parser = Parser::from(tokens);
         parser.parse()
@@ -314,6 +370,7 @@ mod tests {
         match stmt {
             StmtNode::Print(print) => format!("print {}", AstPrinter.print(&*print.expr)),
             StmtNode::Expression(expression) => AstPrinter.print(&*expression.expr),
+            StmtNode::Var(_var) => todo!(),
         }
     }
 
@@ -325,7 +382,7 @@ mod tests {
             print "bar"; print 76;
         "#;
 
-        let statements = parse_program(program).expect("program should parse");
+        let statements = parse_program(program);
         let actual = statements.iter().map(render_stmt).collect::<Vec<_>>();
         let expected = vec![
             "print baz",
@@ -336,11 +393,5 @@ mod tests {
         ];
 
         assert_eq!(expected, actual);
-    }
-
-    #[test]
-    fn test_parse_print_requires_expression() {
-        let err = parse_program("print;").expect_err("expected parse error");
-        assert_eq!("[line 1] Error at ';': Expect expression", err.to_string());
     }
 }

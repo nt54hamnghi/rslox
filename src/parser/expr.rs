@@ -10,6 +10,7 @@ pub trait Visitor {
     fn visit_literal_expr(&self, expr: &Literal) -> Self::Output;
     fn visit_grouping_expr(&self, expr: &Grouping) -> Self::Output;
     fn visit_unary_expr(&self, expr: &Unary) -> Self::Output;
+    fn visit_variable_expr(&self, expr: &Variable) -> Self::Output;
     fn visit_binary_expr(&self, expr: &Binary) -> Self::Output;
 }
 
@@ -18,16 +19,18 @@ pub enum ExprNode {
     Grouping(Grouping),
     Binary(Binary),
     Unary(Unary),
+    Variable(Variable),
     Literal(Literal),
 }
 
 impl Expr for ExprNode {
     fn accept<V: Visitor>(&self, v: &V) -> V::Output {
         match self {
-            ExprNode::Grouping(expr) => expr.accept(v),
-            ExprNode::Binary(expr) => expr.accept(v),
-            ExprNode::Unary(expr) => expr.accept(v),
-            ExprNode::Literal(expr) => expr.accept(v),
+            ExprNode::Grouping(grouping) => grouping.accept(v),
+            ExprNode::Binary(binary) => binary.accept(v),
+            ExprNode::Unary(unary) => unary.accept(v),
+            ExprNode::Literal(literal) => literal.accept(v),
+            ExprNode::Variable(variable) => variable.accept(v),
         }
     }
 }
@@ -110,6 +113,29 @@ impl Unary {
 impl From<Unary> for ExprNode {
     fn from(unary: Unary) -> Self {
         Self::Unary(unary)
+    }
+}
+
+#[derive(Debug)]
+pub struct Variable {
+    pub name: Token,
+}
+
+impl Expr for Variable {
+    fn accept<V: Visitor>(&self, v: &V) -> V::Output {
+        v.visit_variable_expr(self)
+    }
+}
+
+impl Variable {
+    pub fn new(name: Token) -> Self {
+        Self { name }
+    }
+}
+
+impl From<Variable> for ExprNode {
+    fn from(variable: Variable) -> Self {
+        Self::Variable(variable)
     }
 }
 

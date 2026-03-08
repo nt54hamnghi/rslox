@@ -48,6 +48,10 @@ impl Visitor for AstPrinter {
     fn visit_literal_expr(&self, expr: &Literal) -> Self::Output {
         format!("{:?}", expr.value)
     }
+
+    fn visit_variable_expr(&self, _expr: &super::expr::Variable) -> Self::Output {
+        todo!()
+    }
 }
 
 pub fn print_example() {
