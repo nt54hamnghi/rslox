@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use crate::{Value, interpreter::error::RuntimeError, scanner::token::Token};
+use crate::Value;
+use crate::interpreter::error::RuntimeError;
+use crate::scanner::token::Token;
 
 #[derive(Debug, Clone)]
 pub(super) struct Environment {

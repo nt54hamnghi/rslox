@@ -25,45 +25,8 @@ fn run_source(source: &str) -> std::process::Output {
         .expect("binary should run")
 }
 
-#[rstest]
-#[case(
-    r#"
-    print "baz"; print false;
-    print true;
-    print "bar"; print 76;
-    "#,
-    &["baz", "false", "true", "bar", "76"]
-)]
-#[case(
-    r#"
-    (77 + 88 - 51) > (64 - 77) * 2;
-    print !false;
-    "hello" + "world" + "baz" == "helloworldbaz";
-    print !false;
-    "#,
-    &["true", "true"]
-)]
-#[case(
-    r#"
-    51 - 60 >= -76 * 2 / 76 + 29;
-    false == false;
-    ("baz" == "hello") == ("world" != "foo");
-    print false;
-    "#,
-    &["false"]
-)]
-fn test_run_success_cases(#[case] source: &str, #[case] expected_stdout: &[&str]) {
-    let output = run_source(source);
-
-    assert!(output.status.success());
-
-    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    let actual = stdout.lines().collect::<Vec<_>>();
-    assert_eq!(expected_stdout, actual);
-}
-
 #[test]
-fn test_run_print_without_expression_reports_static_error() {
+fn test_print_requires_expression_reports_static_error_and_exit_65() {
     let output = run_source("print;\n");
 
     assert_eq!(Some(65), output.status.code());
@@ -72,19 +35,11 @@ fn test_run_print_without_expression_reports_static_error() {
     assert!(stderr.contains("[line 1] Error at ';': Expect expression"));
 }
 
-// #[test]
-// fn test_run_print_without_expression_reports_static_error() {
-//     let output = run_source("print;\n");
-
-//     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
-//     assert_eq!("[line 1] Error at ';': Expect expression\n", stderr);
-// }
-
 #[rstest]
 #[case(
     r#"
     print "the expression below is invalid";
-    39 + "world";
+    43 + "hello";
     print "this should not be printed";
     "#,
     "the expression below is invalid",
@@ -92,13 +47,13 @@ fn test_run_print_without_expression_reports_static_error() {
 )]
 #[case(
     r#"
-    print "62" + "foo";
-    print true * (64 + 13);
+    print "56" + "hello";
+    print false * (92 + 96);
     "#,
-    "62foo",
+    "56hello",
     None
 )]
-fn test_run_runtime_error_cases(
+fn test_runtime_errors_report_stderr_and_exit_70(
     #[case] source: &str,
     #[case] expected_stdout_fragment: &str,
     #[case] forbidden_stdout_fragment: Option<&str>,

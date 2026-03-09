@@ -390,22 +390,84 @@ mod tests {
     #[rstest]
     #[case(
         r#"
-            (77 + 88 - 51) > (64 - 77) * 2;
-            false == false;
-            ("baz" == "hello") == ("world" != "foo");
+            // Multiple statements in a single line should work
+            print "baz"; print false;
+            print true;
+            print "bar"; print 35;
         "#
     )]
     #[case(
         r#"
-            51 - 60 >= -76 * 2 / 76 + 29;
-            false == false;
-            ("baz" == "hello") == ("world" != "foo");
-            print false;
+            // Leading whitespace should be ignored
+            print 92;
+                print 92 + 30;
+                    print 92 + 30 + 74;
         "#
     )]
-    fn test_interpreter_expression_statements_execute_without_runtime_errors(
-        #[case] program: &str,
-    ) {
+    fn test_multiple_statements_success(#[case] program: &str) {
+        let result = interpret_program(program);
+        assert!(result.is_ok(), "program should execute successfully");
+    }
+
+    #[rstest]
+    #[case(
+        r#"
+            // This program tests that statements are executed
+            // even if they don't have any side effects
+            (37 + 48 - 85) > (93 - 37) * 2;
+            print !true;
+            "bar" + "quz" + "world" == "barquzworld";
+            print !true;
+        "#
+    )]
+    #[case(
+        r#"
+            // This program tests statements that don't have any side effects
+            80 - 50 >= -95 * 2 / 95 + 16;
+            true == true;
+            ("bar" == "baz") == ("quz" != "world");
+            print true;
+        "#
+    )]
+    fn test_expression_statements_success(#[case] program: &str) {
+        let result = interpret_program(program);
+        assert!(result.is_ok(), "program should execute successfully");
+    }
+
+    #[rstest]
+    #[case(
+        r#"
+            // Variables are initialized to the correct value
+            var quz = 10;
+            print quz;
+        "#
+    )]
+    #[case(
+        r#"
+            // Declares multiple variables and prints arithmetic on them
+            var baz = 41;
+            var bar = 41;
+            print baz + bar;
+            var hello = 41;
+            print baz + bar + hello;
+        "#
+    )]
+    #[case(
+        r#"
+            // Assigns arithmetic expression to variable, then prints it
+            var foo = (8 * (79 + 79)) / 4 + 79;
+            print foo;
+        "#
+    )]
+    #[case(
+        r#"
+            // Declares variables and performs operations on them
+            var quz = 94;
+            var foo = quz;
+            print foo + quz;
+        "#
+    )]
+    fn test_variable_declarations_success(#[case] program: &str) {
         let result = interpret_program(program);
         assert!(result.is_ok(), "program should execute successfully");
     }
@@ -427,7 +489,7 @@ mod tests {
         "#,
         "Operands must be numbers.\n[line 3]"
     )]
-    fn test_interpreter_runtime_errors_from_expression_statements(
+    fn test_expression_statement_runtime_errors(
         #[case] program: &str,
         #[case] expected_error: &str,
     ) {
