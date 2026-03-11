@@ -475,6 +475,47 @@ mod tests {
     #[rstest]
     #[case(
         r#"
+            // Declares a variable without initializing it, so its value is nil.
+            var quz;
+            print quz;
+        "#
+    )]
+    #[case(
+        r#"
+            // Declares an initialized variable and an uninitialized variable.
+            var quz = "bar";
+            var baz;
+            print baz;
+        "#
+    )]
+    #[case(
+        r#"
+            // Multiple uninitialized variables should default to nil.
+            var bar = 29;
+            var quz;
+            var world;
+            print quz;
+        "#
+    )]
+    #[case(
+        r#"
+            // Uninitialized variables remain nil alongside initialized ones.
+            var bar = 33 + 87 * 95;
+            print bar;
+            var quz = 87 * 95;
+            print bar + quz;
+            var world;
+            print world;
+        "#
+    )]
+    fn test_variable_initialization_success(#[case] program: &str) {
+        let result = interpret_program(program);
+        assert!(result.is_ok(), "program should execute successfully");
+    }
+
+    #[rstest]
+    #[case(
+        r#"
             // This program tests that + only supports number+number or string+string
             print "the expression below is invalid";
             39 + "world";
