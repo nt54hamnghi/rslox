@@ -34,4 +34,14 @@ impl Environment {
             })
             .cloned()
     }
+
+    pub(super) fn assign(&mut self, token: &Token, value: Value) -> Result<(), RuntimeError> {
+        let var_name = &token.lexeme;
+        if !self.values.contains_key(var_name) {
+            let msg = format!("Undefined variable '{}'.", var_name);
+            return Err(RuntimeError::new(token.clone(), msg));
+        }
+        self.values.insert(var_name.clone(), value);
+        Ok(())
+    }
 }

@@ -3,7 +3,7 @@ use std::vec;
 
 use crate::Value;
 use crate::error::StaticError;
-use crate::parser::expr::{Binary, ExprNode, Grouping, Literal, Unary, Variable};
+use crate::parser::expr::{Assign, Binary, ExprNode, Grouping, Literal, Unary, Variable};
 use crate::parser::stmt::{Expression, Print, StmtNode, Var};
 use crate::scanner::token::{Token, TokenType};
 
@@ -80,6 +80,7 @@ impl Parser {
         }
     }
 
+    // declaration → varDecl | statement ;
     fn declaration(&mut self) -> Result<StmtNode, StaticError> {
         if self.next_if(TokenType::Var).is_some() {
             return self.var_declaration();
@@ -87,6 +88,7 @@ impl Parser {
         self.statement()
     }
 
+    // varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
     fn var_declaration(&mut self) -> Result<StmtNode, StaticError> {
         let name = self.next_ok(TokenType::Identifier, "Expect variable name.".into())?;
 
@@ -100,6 +102,7 @@ impl Parser {
         Ok(Var::new(name, init).into())
     }
 
+    // statement → exprStmt | printStmt ;
     fn statement(&mut self) -> Result<StmtNode, StaticError> {
         if self.next_if(TokenType::Print).is_some() {
             return self.print_statement();
@@ -107,6 +110,7 @@ impl Parser {
         self.expression_statement()
     }
 
+    // printStmt → "print" expression ";" ;
     fn print_statement(&mut self) -> Result<StmtNode, StaticError> {
         let expr = self.expression()?;
         self.expect_semicolon()?;
@@ -114,6 +118,7 @@ impl Parser {
         Ok(Print::new(expr).into())
     }
 
+    // exprStmt → expression ";" ;
     fn expression_statement(&mut self) -> Result<StmtNode, StaticError> {
         let expr = self.expression()?;
         self.expect_semicolon()?;
@@ -121,9 +126,30 @@ impl Parser {
         Ok(Expression::new(expr).into())
     }
 
-    /// expression → equality ;
+    /// expression → assignment ;
     fn expression(&mut self) -> Result<ExprNode, StaticError> {
-        self.equality()
+        self.assignment()
+    }
+
+    /// expression → equality ;
+    fn assignment(&mut self) -> Result<ExprNode, StaticError> {
+        let mut expr = self.equality()?;
+
+        if let Some(equals) = self.next_if(TokenType::Equal) {
+            let value = self.assignment()?;
+
+            let ExprNode::Variable(variable) = &expr else {
+                return Err(StaticError::error_at_token(
+                    &equals,
+                    "Invalid assignment target.".into(),
+                ));
+            };
+
+            let name = variable.name.clone();
+            expr = Assign::new(name, value).into();
+        }
+
+        Ok(expr)
     }
 
     /// equality → comparison ( ( "!=" | "==" ) comparison )* ;

@@ -51,7 +51,7 @@ fn run(filename: PathBuf) -> Result<(), Report> {
 /// Exits with code `70` if runtime evaluation fails.
 fn evaluate(filename: PathBuf, mut sink: impl io::Write) {
     let expr = parse(filename, null());
-    let interpreter = Interpreter::new();
+    let mut interpreter = Interpreter::new();
     match interpreter.evaluate(&expr) {
         Ok(val) => writeln!(sink, "{}", val).unwrap(),
         Err(err) => {

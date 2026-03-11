@@ -7,8 +7,8 @@ pub trait Stmt {
 
 pub trait Visitor {
     type Output;
-    fn visit_print_stmt(&self, stmt: &Print) -> Self::Output;
-    fn visit_expression_stmt(&self, stmt: &Expression) -> Self::Output;
+    fn visit_print_stmt(&mut self, stmt: &Print) -> Self::Output;
+    fn visit_expression_stmt(&mut self, stmt: &Expression) -> Self::Output;
     fn visit_var_stmt(&mut self, stmt: &Var) -> Self::Output;
 }
 

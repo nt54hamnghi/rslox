@@ -61,7 +61,7 @@ impl Interpreter {
     /// Evaluates a single expression tree.
     ///
     /// Returns the resulting value or a runtime error when evaluation fails.
-    pub fn evaluate(&self, expr: &ExprNode) -> Result<Value, RuntimeError> {
+    pub fn evaluate(&mut self, expr: &ExprNode) -> Result<Value, RuntimeError> {
         Expr::accept(expr, self)
     }
 }
@@ -69,13 +69,13 @@ impl Interpreter {
 impl stmt::Visitor for Interpreter {
     type Output = Result<(), RuntimeError>;
 
-    fn visit_print_stmt(&self, stmt: &stmt::Print) -> Self::Output {
+    fn visit_print_stmt(&mut self, stmt: &stmt::Print) -> Self::Output {
         let value = self.evaluate(&stmt.expr)?;
         println!("{value}");
         Ok(())
     }
 
-    fn visit_expression_stmt(&self, stmt: &stmt::Expression) -> Self::Output {
+    fn visit_expression_stmt(&mut self, stmt: &stmt::Expression) -> Self::Output {
         self.evaluate(&stmt.expr)?;
         Ok(())
     }
@@ -103,14 +103,14 @@ impl expr::Visitor for Interpreter {
     }
 
     /// Evaluates the expression inside grouping parentheses.
-    fn visit_grouping_expr(&self, expr: &expr::Grouping) -> Self::Output {
+    fn visit_grouping_expr(&mut self, expr: &expr::Grouping) -> Self::Output {
         self.evaluate(&expr.expression)
     }
 
     /// Evaluates unary operators such as logical negation and numeric negation.
     ///
     /// Returns an error when numeric negation is applied to a non-number.
-    fn visit_unary_expr(&self, expr: &expr::Unary) -> Self::Output {
+    fn visit_unary_expr(&mut self, expr: &expr::Unary) -> Self::Output {
         let right = self.evaluate(&expr.right)?;
 
         match expr.operator.typ {
@@ -137,10 +137,16 @@ impl expr::Visitor for Interpreter {
         self.environment.get(&expr.name)
     }
 
+    fn visit_assign_expr(&mut self, expr: &expr::Assign) -> Self::Output {
+        let value = self.evaluate(&expr.value)?;
+        self.environment.assign(&expr.name, value.clone())?;
+        Ok(value)
+    }
+
     /// Evaluates binary operators including arithmetic, comparison, and equality.
     ///
     /// Returns an error for invalid operand types or invalid numeric operations.
-    fn visit_binary_expr(&self, expr: &Binary) -> Self::Output {
+    fn visit_binary_expr(&mut self, expr: &Binary) -> Self::Output {
         let left = self.evaluate(&expr.left)?;
         let right = self.evaluate(&expr.right)?;
         let op = expr.operator.clone();
@@ -217,7 +223,7 @@ mod tests {
         let expr = parser
             .parse_expression()
             .expect("Expected a valid expression");
-        let interpreter = Interpreter::new();
+        let mut interpreter = Interpreter::new();
         interpreter.evaluate(&expr)
     }
 

@@ -6,8 +6,8 @@ use crate::scanner::token::{Token, TokenType};
 pub struct AstPrinter;
 
 impl AstPrinter {
-    pub fn print<E: Expr>(self, expr: &E) -> String {
-        expr.accept(&self)
+    pub fn print<E: Expr>(mut self, expr: &E) -> String {
+        expr.accept(&mut self)
     }
 }
 
@@ -26,12 +26,12 @@ macro_rules! parenthesize {
 impl Visitor for AstPrinter {
     type Output = String;
 
-    fn visit_grouping_expr(&self, expr: &Grouping) -> Self::Output {
+    fn visit_grouping_expr(&mut self, expr: &Grouping) -> Self::Output {
         let Grouping { expression } = expr;
         parenthesize!(self, "group", expression)
     }
 
-    fn visit_binary_expr(&self, expr: &Binary) -> Self::Output {
+    fn visit_binary_expr(&mut self, expr: &Binary) -> Self::Output {
         let Binary {
             left,
             operator,
@@ -40,7 +40,7 @@ impl Visitor for AstPrinter {
         parenthesize!(self, operator.lexeme, left, right)
     }
 
-    fn visit_unary_expr(&self, expr: &Unary) -> Self::Output {
+    fn visit_unary_expr(&mut self, expr: &Unary) -> Self::Output {
         let Unary { operator, right } = expr;
         parenthesize!(self, operator.lexeme, right)
     }
@@ -50,6 +50,10 @@ impl Visitor for AstPrinter {
     }
 
     fn visit_variable_expr(&self, _expr: &super::expr::Variable) -> Self::Output {
+        todo!()
+    }
+
+    fn visit_assign_expr(&mut self, _expr: &super::expr::Assign) -> Self::Output {
         todo!()
     }
 }

@@ -1,6 +1,6 @@
-// This program tries to access a variable before it is declared
-// It leads to a runtime error
-var bar = 73;
-var world = 95;
-var hello = 54;
-print bar + world + hello + quz; print 30;
+var b;
+print b = 3;
+
+var a = 1;
+a = 2;
+print a;
