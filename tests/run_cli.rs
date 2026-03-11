@@ -121,6 +121,15 @@ fn test_runtime_errors_report_stderr_and_exit_70(
     Some("30"),
     "Undefined variable 'quz'."
 )]
+#[case(
+    r#"
+    // As hello is not declared before
+    var baz = hello; // expect runtime error
+    "#,
+    None,
+    None,
+    "Undefined variable 'hello'."
+)]
 fn test_undefined_variable_runtime_errors_report_stderr_and_exit_70(
     #[case] source: &str, // Full program text passed to the CLI.
     #[case] expected_stdout_fragment: Option<&str>, // Output that should appear before failure, if any.

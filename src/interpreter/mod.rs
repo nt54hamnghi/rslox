@@ -516,6 +516,42 @@ mod tests {
     #[rstest]
     #[case(
         r#"
+            var world = "before";
+            print world;
+            var world = "after";
+            print world;
+        "#
+    )]
+    #[case(
+        r#"
+            var hello = "after";
+            var hello = "before";
+            // Using a previously declared variable's value to initialize a new variable should work.
+            var hello = hello;
+            print hello;
+        "#
+    )]
+    #[case(
+        r#"
+            // This program declares and initializes multiple variables and prints their values.
+            var bar = 2;
+            print bar;
+            var bar = 3;
+            print bar;
+            var baz = 5;
+            print baz;
+            var bar = baz;
+            print bar;
+        "#
+    )]
+    fn test_variable_redeclaration_success(#[case] program: &str) {
+        let result = interpret_program(program);
+        assert!(result.is_ok(), "program should execute successfully");
+    }
+
+    #[rstest]
+    #[case(
+        r#"
             // This program tests that + only supports number+number or string+string
             print "the expression below is invalid";
             39 + "world";
@@ -573,6 +609,13 @@ mod tests {
             print bar + world + hello + quz; print 30;
         "#,
         "Undefined variable 'quz'.\n[line 6]"
+    )]
+    #[case(
+        r#"
+            // As hello is not declared before.
+            var baz = hello;
+        "#,
+        "Undefined variable 'hello'.\n[line 3]"
     )]
     fn test_variable_runtime_errors_undefined_variable(
         #[case] program: &str,
