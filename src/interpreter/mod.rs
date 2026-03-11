@@ -496,4 +496,48 @@ mod tests {
         let err = interpret_program(program).expect_err("expected runtime error");
         assert_eq!(expected_error, err.to_string());
     }
+
+    #[rstest]
+    #[case(
+        r#"
+            // This program tries to access a variable before it is declared.
+            print 34;
+            print x;
+        "#,
+        "Undefined variable 'x'.\n[line 4]"
+    )]
+    #[case(
+        r#"
+            // This program tries to access a variable before it is declared.
+            var world = 56;
+            print bar;
+        "#,
+        "Undefined variable 'bar'.\n[line 4]"
+    )]
+    #[case(
+        r#"
+            // This program tries to access a variable before it is declared.
+            var hello = 73;
+            var result = (hello + quz) / foo;
+            print result;
+        "#,
+        "Undefined variable 'quz'.\n[line 4]"
+    )]
+    #[case(
+        r#"
+            // This program tries to access a variable before it is declared.
+            var bar = 73;
+            var world = 95;
+            var hello = 54;
+            print bar + world + hello + quz; print 30;
+        "#,
+        "Undefined variable 'quz'.\n[line 6]"
+    )]
+    fn test_variable_runtime_errors_undefined_variable(
+        #[case] program: &str,
+        #[case] expected_error: &str,
+    ) {
+        let err = interpret_program(program).expect_err("expected runtime error");
+        assert_eq!(expected_error, err.to_string());
+    }
 }
