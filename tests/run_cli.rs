@@ -25,6 +25,21 @@ fn run_source(source: &str) -> std::process::Output {
         .expect("binary should run")
 }
 
+fn assert_success_output(source: &str, expected_stdout: &str) {
+    let output = run_source(source);
+
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert_eq!(expected_stdout, stdout);
+
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(
+        stderr.is_empty(),
+        "successful execution should not write stderr"
+    );
+}
+
 #[test]
 fn test_print_requires_expression_reports_static_error_and_exit_65() {
     let output = run_source("print;\n");
@@ -33,6 +48,231 @@ fn test_print_requires_expression_reports_static_error_and_exit_65() {
 
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
     assert!(stderr.contains("[line 1] Error at ';': Expect expression"));
+}
+
+#[rstest]
+#[case(
+    r#"
+    // Multiple statements in a single line should work
+    print "baz"; print false;
+    print true;
+    print "bar"; print 35;
+    "#,
+    "baz\nfalse\ntrue\nbar\n35\n"
+)]
+#[case(
+    r#"
+    // Leading whitespace should be ignored
+    print 92;
+        print 92 + 30;
+            print 92 + 30 + 74;
+    "#,
+    "92\n122\n196\n"
+)]
+fn test_multiple_statements_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
+    // This program tests that statements are executed
+    // even if they don't have any side effects
+    (37 + 48 - 85) > (93 - 37) * 2;
+    print !true;
+    "bar" + "quz" + "world" == "barquzworld";
+    print !true;
+    "#,
+    "false\nfalse\n"
+)]
+#[case(
+    r#"
+    // This program tests statements that don't have any side effects
+    80 - 50 >= -95 * 2 / 95 + 16;
+    true == true;
+    ("bar" == "baz") == ("quz" != "world");
+    print true;
+    "#,
+    "true\n"
+)]
+fn test_expression_statements_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
+    // Variables are initialized to the correct value
+    var quz = 10;
+    print quz;
+    "#,
+    "10\n"
+)]
+#[case(
+    r#"
+    // Declares multiple variables and prints arithmetic on them
+    var baz = 41;
+    var bar = 41;
+    print baz + bar;
+    var hello = 41;
+    print baz + bar + hello;
+    "#,
+    "82\n123\n"
+)]
+#[case(
+    r#"
+    // Assigns arithmetic expression to variable, then prints it
+    var foo = (8 * (79 + 79)) / 4 + 79;
+    print foo;
+    "#,
+    "395\n"
+)]
+#[case(
+    r#"
+    // Declares variables and performs operations on them
+    var quz = 94;
+    var foo = quz;
+    print foo + quz;
+    "#,
+    "188\n"
+)]
+fn test_variable_declarations_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
+    // Declares a variable without initializing it, so its value is nil.
+    var quz;
+    print quz;
+    "#,
+    "nil\n"
+)]
+#[case(
+    r#"
+    // Declares an initialized variable and an uninitialized variable.
+    var quz = "bar";
+    var baz;
+    print baz;
+    "#,
+    "nil\n"
+)]
+#[case(
+    r#"
+    // Multiple uninitialized variables should default to nil.
+    var bar = 29;
+    var quz;
+    var world;
+    print quz;
+    "#,
+    "nil\n"
+)]
+#[case(
+    r#"
+    // Uninitialized variables remain nil alongside initialized ones.
+    var bar = 33 + 87 * 95;
+    print bar;
+    var quz = 87 * 95;
+    print bar + quz;
+    var world;
+    print world;
+    "#,
+    "8298\n16563\nnil\n"
+)]
+fn test_variable_initialization_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
+    var world = "before";
+    print world;
+    var world = "after";
+    print world;
+    "#,
+    "before\nafter\n"
+)]
+#[case(
+    r#"
+    var hello = "after";
+    var hello = "before";
+    // Using a previously declared variable's value to initialize a new variable should work.
+    var hello = hello;
+    print hello;
+    "#,
+    "before\n"
+)]
+#[case(
+    r#"
+    // This program declares and initializes multiple variables and prints their values.
+    var bar = 2;
+    print bar;
+    var bar = 3;
+    print bar;
+    var baz = 5;
+    print baz;
+    var bar = baz;
+    print bar;
+    "#,
+    "2\n3\n5\n5\n"
+)]
+fn test_variable_redeclaration_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
+    var baz;
+    baz = 1;
+    print baz;
+    // The assignment operator should return the value that was assigned.
+    print baz = 2;
+    print baz;
+    "#,
+    "1\n2\n2\n"
+)]
+#[case(
+    r#"
+    // This program tests that the assignment operator works on any declared variable.
+    var baz = 28;
+    var quz = 28;
+    quz = baz;
+    baz = quz;
+    print baz + quz;
+    "#,
+    "56\n"
+)]
+#[case(
+    r#"
+    var hello;
+    var baz;
+
+    // The assignment operator should return the value that was assigned.
+    hello = baz = 71 + 94 * 43;
+    print hello;
+    print baz;
+    "#,
+    "4113\n4113\n"
+)]
+#[case(
+    r#"
+    var foo = 63;
+    var bar;
+    var quz;
+
+    // The assignment operator should return the value that was assigned.
+    foo = bar = quz = foo * 2;
+    print foo;
+    print bar;
+    print bar;
+    "#,
+    "126\n126\n126\n"
+)]
+fn test_assignment_operation_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
 }
 
 #[rstest]
