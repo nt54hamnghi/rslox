@@ -10,6 +10,7 @@ pub trait Visitor {
     fn visit_print_stmt(&mut self, stmt: &Print) -> Self::Output;
     fn visit_expression_stmt(&mut self, stmt: &Expression) -> Self::Output;
     fn visit_var_stmt(&mut self, stmt: &Var) -> Self::Output;
+    fn visit_block_stmt(&mut self, stmt: &Block) -> Self::Output;
 }
 
 #[derive(Debug)]
@@ -17,6 +18,7 @@ pub enum StmtNode {
     Print(Print),
     Expression(Expression),
     Var(Var),
+    Block(Block),
 }
 
 impl Stmt for StmtNode {
@@ -25,6 +27,7 @@ impl Stmt for StmtNode {
             StmtNode::Print(print) => print.accept(visitor),
             StmtNode::Expression(expression) => expression.accept(visitor),
             StmtNode::Var(var) => var.accept(visitor),
+            StmtNode::Block(block) => block.accept(visitor),
         }
     }
 }
@@ -78,6 +81,29 @@ impl Var {
 impl From<Var> for StmtNode {
     fn from(var: Var) -> Self {
         Self::Var(var)
+    }
+}
+
+#[derive(Debug)]
+pub struct Block {
+    pub statements: Vec<StmtNode>,
+}
+
+impl Stmt for Block {
+    fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
+        visitor.visit_block_stmt(&self)
+    }
+}
+
+impl Block {
+    pub fn new(statements: Vec<StmtNode>) -> Self {
+        Self { statements }
+    }
+}
+
+impl From<Block> for StmtNode {
+    fn from(var: Block) -> Self {
+        Self::Block(var)
     }
 }
 

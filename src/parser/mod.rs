@@ -4,7 +4,7 @@ use std::vec;
 use crate::Value;
 use crate::error::StaticError;
 use crate::parser::expr::{Assign, Binary, ExprNode, Grouping, Literal, Unary, Variable};
-use crate::parser::stmt::{Expression, Print, StmtNode, Var};
+use crate::parser::stmt::{Block, Expression, Print, StmtNode, Var};
 use crate::scanner::token::{Token, TokenType};
 
 pub mod expr;
@@ -102,12 +102,27 @@ impl Parser {
         Ok(Var::new(name, init).into())
     }
 
-    // statement → exprStmt | printStmt ;
+    // statement → exprStmt | printStmt | block ;
     fn statement(&mut self) -> Result<StmtNode, StaticError> {
         if self.next_if(TokenType::Print).is_some() {
             return self.print_statement();
         }
+        if self.next_if(TokenType::LeftBrace).is_some() {
+            return self.block_statement();
+        }
         self.expression_statement()
+    }
+
+    // block → "{" declaration* "}" ;
+    fn block_statement(&mut self) -> Result<StmtNode, StaticError> {
+        let mut statements = Vec::new();
+        while !self.peek_check(TokenType::RightBrace) && !self.is_at_end() {
+            let stmt = self.declaration()?;
+            statements.push(stmt);
+        }
+
+        self.next_ok(TokenType::RightBrace, "Expect '}' after block.".into())?;
+        Ok(Block::new(statements).into())
     }
 
     // printStmt → "print" expression ";" ;
@@ -278,6 +293,17 @@ impl Parser {
         self.tokens.next_if(|token| token.typ == tt)
     }
 
+    /// Checks whether the next token matches the given type without consuming it.
+    /// Returns:
+    /// - `true` if the next token matches the given type.
+    /// - `false` if the next token doesn't match or if at end of tokens.
+    fn peek_check(&mut self, tt: TokenType) -> bool {
+        if self.is_at_end() {
+            return false;
+        }
+        self.tokens.peek().is_some_and(|t| t.typ == tt)
+    }
+
     /// Consumes the next token if it matches the given type, or returns an error.
     ///
     /// Returns:
@@ -393,6 +419,7 @@ mod tests {
             StmtNode::Print(print) => format!("print {}", AstPrinter.print(&*print.expr)),
             StmtNode::Expression(expression) => AstPrinter.print(&*expression.expr),
             StmtNode::Var(_var) => todo!(),
+            StmtNode::Block(_block) => todo!(),
         }
     }
 

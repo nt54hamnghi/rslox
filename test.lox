@@ -1,6 +1,4 @@
-var b;
-print b = 3;
-
-var a = 1;
-a = 2;
-print a;
+var a = " world";
+{
+    print "hello" + a;
+}

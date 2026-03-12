@@ -34,13 +34,13 @@ fn check_number_operands(left: Value, right: Value, op: Token) -> Result<(f64, f
 
 #[derive(Debug, Clone)]
 pub struct Interpreter {
-    environment: Environment,
+    environment: Box<Environment>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Self {
-            environment: Environment::new(),
+            environment: Box::new(Environment::new()),
         }
     }
 
@@ -89,6 +89,24 @@ impl stmt::Visitor for Interpreter {
             .unwrap_or(Value::Nil);
 
         self.environment.define(stmt.name.lexeme.clone(), value);
+
+        Ok(())
+    }
+
+    fn visit_block_stmt(&mut self, stmt: &stmt::Block) -> Self::Output {
+        let outer = std::mem::take(&mut self.environment);
+        self.environment = Box::new(Environment::with_enclosing(outer));
+
+        for stmt in &stmt.statements {
+            if let Err(err) = self.execute(stmt) {
+                let outer = self.environment.enclosing.take().unwrap();
+                self.environment = outer;
+                return Err(err);
+            }
+        }
+
+        let outer = self.environment.enclosing.take().unwrap();
+        self.environment = outer;
 
         Ok(())
     }
