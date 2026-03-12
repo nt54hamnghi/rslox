@@ -169,6 +169,64 @@ fn test_block_statements_success(#[case] source: &str, #[case] expected_stdout: 
 #[rstest]
 #[case(
     r#"
+    var bar = (20 * 77) - 63;
+    {
+        // Local scope should be created
+        var hello = "world" + "42";
+        print hello;
+    }
+    print bar;
+    "#,
+    "world42\n1477\n"
+)]
+#[case(
+    r#"
+    // This program tests variable shadowing
+    // across nested scopes
+    {
+        var world = "before";
+        {
+            var world = "after";
+            print world;
+        }
+        print world;
+    }
+    "#,
+    "after\nbefore\n"
+)]
+#[case(
+    r#"
+    // This program creates nested scopes and tests
+    // local scopes and variable shadowing
+    var world = "global world";
+    var quz = "global quz";
+    var foo = "global foo";
+    {
+      var world = "outer world";
+      var quz = "outer quz";
+      {
+        var world = "inner world";
+        print world;
+        print quz;
+        print foo;
+      }
+      print world;
+      print quz;
+      print foo;
+    }
+    print world;
+    print quz;
+    print foo;
+    "#,
+    "inner world\nouter quz\nglobal foo\nouter world\nouter quz\nglobal foo\nglobal world\nglobal quz\nglobal foo\n"
+)]
+fn test_scopes_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
     // Variables are initialized to the correct value
     var quz = 10;
     print quz;
@@ -457,4 +515,40 @@ fn test_undefined_variable_runtime_errors_report_stderr_and_exit_70(
 
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
     assert!(stderr.contains(expected_stderr_fragment));
+}
+
+#[test]
+fn test_scope_runtime_error_reports_stderr_and_exit_70() {
+    let source = r#"
+    // Variables declared in an outer scope should be
+    // accessible inside inner scopes, but not the
+    // other way around
+    {
+      var world = "outer world";
+      var quz = "outer quz";
+      {
+        world = "modified world";
+        var quz = "inner quz";
+        print world;
+        print quz;
+      }
+      print world;
+      print quz;
+    }
+    print world;
+    "#;
+
+    let output = run_source(source);
+
+    assert_eq!(Some(70), output.status.code());
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert_eq!(
+        "modified world\ninner quz\nmodified world\nouter quz\n",
+        stdout
+    );
+
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(stderr.contains("Undefined variable 'world'."));
+    assert!(stderr.contains("[line 17]"));
 }
