@@ -50,6 +50,27 @@ fn test_print_requires_expression_reports_static_error_and_exit_65() {
     assert!(stderr.contains("[line 1] Error at ';': Expect expression"));
 }
 
+#[test]
+fn test_block_requires_closing_brace_reports_static_error_and_exit_65() {
+    let source = r#"
+    {
+        var foo = 42;
+        var quz = 42;
+        {
+            print foo + quz;
+        // Missing closing curly brace
+        // Expect compile error
+    }
+    "#;
+
+    let output = run_source(source);
+
+    assert_eq!(Some(65), output.status.code());
+
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(stderr.contains("[line 10] Error at end: Expect '}' after block."));
+}
+
 #[rstest]
 #[case(
     r#"
@@ -96,6 +117,52 @@ fn test_multiple_statements_success(#[case] source: &str, #[case] expected_stdou
     "true\n"
 )]
 fn test_expression_statements_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
+    // This program tests that curly braces can be
+    // used to group multiple statements into blocks
+    {
+        var quz = "bar";
+        print quz;
+    }
+    "#,
+    "bar\n"
+)]
+#[case(
+    r#"
+    // This program tests that blocks can be used
+    // to group statements and variables
+    // creating local scopes
+    {
+        var quz = "before";
+        print quz;
+    }
+    {
+        var quz = "after";
+        print quz;
+    }
+    "#,
+    "before\nafter\n"
+)]
+#[case(
+    r#"
+    // This program tests that scopes can be nested
+    {
+        var world = 88;
+        {
+            var bar = 88;
+            print bar;
+        }
+        print world;
+    }
+    "#,
+    "88\n88\n"
+)]
+fn test_block_statements_success(#[case] source: &str, #[case] expected_stdout: &str) {
     assert_success_output(source, expected_stdout);
 }
 

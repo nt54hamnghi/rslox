@@ -449,4 +449,45 @@ mod tests {
         let err = parse_program("print;").expect_err("expected parse error");
         assert_eq!("[line 1] Error at ';': Expect expression", err.to_string());
     }
+
+    #[test]
+    fn test_parse_block_statement() {
+        let program = r#"
+            {
+                var quz = "bar";
+                print quz;
+            }
+        "#;
+
+        let statements = parse_program(program).expect("Expected a valid program");
+        assert_eq!(1, statements.len());
+
+        let StmtNode::Block(block) = &statements[0] else {
+            panic!("expected top-level block statement");
+        };
+
+        assert_eq!(2, block.statements.len());
+        assert!(matches!(block.statements[0], StmtNode::Var(_)));
+        assert!(matches!(block.statements[1], StmtNode::Print(_)));
+    }
+
+    #[test]
+    fn test_parse_block_requires_closing_brace() {
+        let program = r#"
+            {
+                var foo = 42;
+                var quz = 42;
+                {
+                    print foo + quz;
+                // Missing closing curly brace
+                // Expect compile error
+            }
+        "#;
+
+        let err = parse_program(program).expect_err("expected parse error");
+        assert_eq!(
+            "[line 10] Error at end: Expect '}' after block.",
+            err.to_string()
+        );
+    }
 }
