@@ -679,6 +679,141 @@ fn test_nested_if_statements_success(#[case] source: &str, #[case] expected_stdo
 #[rstest]
 #[case(
     r#"
+    // The logical OR operator should return the first
+    // value that is truthy
+    if (false or "ok") print "hello";
+    if (nil or "ok") print "hello";
+
+    if (false or false) print "bar";
+    if (true or "bar") print "bar";
+
+    if (30 or "quz") print "quz";
+    if ("quz" or "quz") print "quz";
+    "#,
+    "hello\nhello\nbar\nquz\nquz\n"
+)]
+#[case(
+    r#"
+    // This program uses the logical OR operator to
+    // print the first value that is truthy
+    print 77 or true;
+    print false or 77;
+    print false or false or true;
+
+    print false or false;
+    print false or false or false;
+    print true or true or true or true;
+    "#,
+    "77\n77\ntrue\nfalse\nfalse\ntrue\n"
+)]
+#[case(
+    r#"
+    // This program relies on the fact that
+    // assignments return the assigned value
+    // And that the logical OR operator short-circuits
+    // So, if the first assignment is truthy, it
+    // wouldn't proceed to the subsequent assignments
+    // And then prints the assigned values
+    var a = "foo";
+    var b = "foo";
+    (a = false) or (b = true) or (a = "foo");
+    print a;
+    print b;
+    "#,
+    "false\ntrue\n"
+)]
+#[case(
+    r#"
+    // This program uses if conditions to get the stage
+    // of a person's life based on their age, and then
+    // prints if they are eligible for voting
+    var stage = "unknown";
+    var age = 65;
+    if (age < 18) { stage = "child"; }
+    if (age >= 18) { stage = "adult"; }
+    print stage;
+
+    var isAdult = age >= 18;
+    if (isAdult) { print "eligible for voting"; }
+    if (!isAdult) { print "not eligible for voting"; }
+    "#,
+    "adult\neligible for voting\n"
+)]
+fn test_logical_or_operator_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
+    // The logical AND operator should return the
+    // first falsy value
+    if (false and "bad") print "bar";
+    if (nil and "bad") print "bar";
+
+    // If all values are truthy, it returns the last
+    // value
+    if (true and "hello") print "hello";
+    if (24 and "baz") print "baz";
+    if ("baz" and "baz") print "baz";
+    if ("" and "world") print "world";
+    "#,
+    "hello\nbaz\nbaz\nworld\n"
+)]
+#[case(
+    r#"
+    // This program uses the logical AND operator to
+    // print the first falsy value
+    // Or the last value if all values are truthy
+    print false and 1;
+    print true and 1;
+    print 28 and "quz" and false;
+
+    print 28 and true;
+    print 28 and "quz" and 28;
+    "#,
+    "false\n1\nfalse\ntrue\n28\n"
+)]
+#[case(
+    r#"
+    // This program relies on the fact that
+    // assignments return the assigned value
+    // And that the logical AND operator short-circuits
+    // So, when it encounters a falsy value, it
+    // wouldn't proceed to the subsequent assignments
+    // And then prints the assigned values
+    var a = "hello";
+    var b = "hello";
+    (a = true) and (b = false) and (a = "bad");
+    print a;
+    print b;
+    "#,
+    "true\nfalse\n"
+)]
+#[case(
+    r#"
+    // This program uses if conditions to get the stage
+    // of a person's life based on their age, and then
+    // prints if they are eligible for voting
+    var stage = "unknown";
+    var age = 40;
+    if (age < 18) { stage = "child"; }
+    if (age >= 18) { stage = "adult"; }
+    print stage;
+
+    var isAdult = age >= 18;
+    if (isAdult) { print "eligible for voting"; }
+    if (!isAdult) { print "not eligible for voting"; }
+    "#,
+    "adult\neligible for voting\n"
+)]
+fn test_logical_and_operator_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
     print "the expression below is invalid";
     43 + "hello";
     print "this should not be printed";

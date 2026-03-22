@@ -1,4 +1,1 @@
-var a = " world";
-{
-    print "hello" + a;
-}
+if (false and false) print "bar";

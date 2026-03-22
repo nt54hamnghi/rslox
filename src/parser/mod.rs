@@ -205,7 +205,7 @@ impl Parser {
     fn logic_and(&mut self) -> Result<ExprNode, StaticError> {
         let mut expr = self.equality()?;
 
-        while let Some(operator) = self.next_match(&[TokenType::Or]) {
+        while let Some(operator) = self.next_match(&[TokenType::And]) {
             let right = self.equality()?;
             expr = Logical::new(expr, operator, right).into();
         }
