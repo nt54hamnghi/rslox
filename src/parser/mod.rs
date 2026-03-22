@@ -4,7 +4,7 @@ use std::vec;
 use crate::Value;
 use crate::error::StaticError;
 use crate::parser::expr::{Assign, Binary, ExprNode, Grouping, Literal, Unary, Variable};
-use crate::parser::stmt::{Block, Expression, Print, StmtNode, Var};
+use crate::parser::stmt::{Block, Expression, If, Print, StmtNode, Var};
 use crate::scanner::token::{Token, TokenType};
 
 pub mod expr;
@@ -102,8 +102,11 @@ impl Parser {
         Ok(Var::new(name, init).into())
     }
 
-    // statement → exprStmt | printStmt | block ;
+    // statement → exprStmt | ifStmt | printStmt | block ;
     fn statement(&mut self) -> Result<StmtNode, StaticError> {
+        if self.next_if(TokenType::If).is_some() {
+            return self.if_statement();
+        }
         if self.next_if(TokenType::Print).is_some() {
             return self.print_statement();
         }
@@ -111,6 +114,25 @@ impl Parser {
             return self.block_statement();
         }
         self.expression_statement()
+    }
+
+    // ifStmt → "if" "(" expression ")" statement ( "else" statement )? ;
+    fn if_statement(&mut self) -> Result<StmtNode, StaticError> {
+        self.next_ok(TokenType::LeftParen, "Expect '(' after 'if'.".into())?;
+        let cond = self.expression()?;
+        self.next_ok(
+            TokenType::RightParen,
+            "Expect ')' after if condition.".into(),
+        )?;
+
+        let then_branch = self.statement()?;
+
+        let mut else_branch = None;
+        if self.next_if(TokenType::Else).is_some() {
+            else_branch = Some(self.statement()?)
+        }
+
+        Ok(If::new(cond, then_branch, else_branch).into())
     }
 
     // block → "{" declaration* "}" ;
@@ -420,6 +442,7 @@ mod tests {
             StmtNode::Expression(expression) => AstPrinter.print(&*expression.expr),
             StmtNode::Var(_var) => todo!(),
             StmtNode::Block(_block) => todo!(),
+            StmtNode::If(_if) => todo!(),
         }
     }
 

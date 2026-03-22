@@ -4,10 +4,14 @@ declaration    → varDecl
                | statement ;
 
 statement      → exprStmt
+               | ifStmt
                | printStmt
                | block ;
 
 block          → "{" declaration* "}" ;
+
+ifStmt         → "if" "(" expression ")" statement
+               ( "else" statement )? ;
 
 varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
 

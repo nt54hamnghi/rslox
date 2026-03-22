@@ -110,6 +110,16 @@ impl stmt::Visitor for Interpreter {
 
         Ok(())
     }
+
+    fn visit_if_stmt(&mut self, stmt: &stmt::If) -> Self::Output {
+        if self.evaluate(&stmt.condition)?.is_truthy() {
+            return self.execute(&stmt.then_branch);
+        } else if let Some(else_branch) = stmt.else_branch.as_ref() {
+            return self.execute(else_branch);
+        };
+
+        Ok(())
+    }
 }
 
 impl expr::Visitor for Interpreter {

@@ -10,6 +10,7 @@ pub trait Visitor {
     fn visit_print_stmt(&mut self, stmt: &Print) -> Self::Output;
     fn visit_expression_stmt(&mut self, stmt: &Expression) -> Self::Output;
     fn visit_var_stmt(&mut self, stmt: &Var) -> Self::Output;
+    fn visit_if_stmt(&mut self, stmt: &If) -> Self::Output;
     fn visit_block_stmt(&mut self, stmt: &Block) -> Self::Output;
 }
 
@@ -18,6 +19,7 @@ pub enum StmtNode {
     Print(Print),
     Expression(Expression),
     Var(Var),
+    If(If),
     Block(Block),
 }
 
@@ -28,6 +30,7 @@ impl Stmt for StmtNode {
             StmtNode::Expression(expression) => expression.accept(visitor),
             StmtNode::Var(var) => var.accept(visitor),
             StmtNode::Block(block) => block.accept(visitor),
+            StmtNode::If(ifs) => ifs.accept(visitor),
         }
     }
 }
@@ -73,7 +76,7 @@ impl Var {
     pub fn new(name: Token, initializer: Option<ExprNode>) -> Self {
         Self {
             name,
-            initializer: initializer.map(|i| Box::new(i)),
+            initializer: initializer.map(Box::new),
         }
     }
 }
@@ -92,6 +95,35 @@ pub struct Block {
 impl Stmt for Block {
     fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_block_stmt(&self)
+    }
+}
+
+#[derive(Debug)]
+pub struct If {
+    pub condition: Box<ExprNode>,
+    pub then_branch: Box<StmtNode>,
+    pub else_branch: Option<Box<StmtNode>>,
+}
+
+impl Stmt for If {
+    fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
+        visitor.visit_if_stmt(&self)
+    }
+}
+
+impl If {
+    pub fn new(condition: ExprNode, then_branch: StmtNode, else_branch: Option<StmtNode>) -> Self {
+        Self {
+            condition: Box::new(condition),
+            then_branch: Box::new(then_branch),
+            else_branch: else_branch.map(Box::new),
+        }
+    }
+}
+
+impl From<If> for StmtNode {
+    fn from(ifs: If) -> Self {
+        Self::If(ifs)
     }
 }
 

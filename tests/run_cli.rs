@@ -403,6 +403,60 @@ fn test_assignment_operation_success(#[case] source: &str, #[case] expected_stdo
 #[rstest]
 #[case(
     r#"
+    // This should print the string if the condition
+    // evaluates to True
+    if (false) print "foo";
+    "#,
+    ""
+)]
+#[case(
+    r#"
+    // This should print "block body" if the condition
+    // evaluates to True
+    if (true) {
+      print "block body";
+    }
+    "#,
+    "block body\n"
+)]
+#[case(
+    r#"
+    // This program tests whether the assignment
+    // operation returns the value assigned.
+    // The if condition should evaluate to true and
+    // the inner boolean expression must be printed.
+    // So, in this case the if condition evaluates to
+    //true and prints the inner boolean expression
+    var a = false;
+    if (a = true) {
+      print (a == true);
+    }
+    "#,
+    "true\n"
+)]
+#[case(
+    r#"
+    // This program should print a different string
+    // based on the value of age
+    var stage = "unknown";
+    var age = 44;
+    if (age < 18) { stage = "child"; }
+    if (age >= 18) { stage = "adult"; }
+    print stage;
+
+    var isAdult = age >= 18;
+    if (isAdult) { print "eligible for voting"; }
+    if (!isAdult) { print "not eligible for voting"; }
+    "#,
+    "adult\neligible for voting\n"
+)]
+fn test_if_statements_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
     print "the expression below is invalid";
     43 + "hello";
     print "this should not be printed";
