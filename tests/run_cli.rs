@@ -955,6 +955,54 @@ fn test_for_statements_success(#[case] source: &str, #[case] expected_stdout: &s
 #[rstest]
 #[case(
     r#"
+    // This program would give a compile error
+    // because the variable declaration is not
+    // inside a block
+    for (;;) var foo;
+    "#,
+    "[line 5] Error at 'var': Expect expression"
+)]
+#[case(
+    r#"
+    // This program would give a compile error
+    // because the condition is not valid
+    for (var a = 1; {}; a = a + 1) {}
+    "#,
+    "[line 4] Error at '{': Expect expression"
+)]
+#[case(
+    r#"
+    // This program would give a compile error
+    // because the increment clause is not valid
+    for (var a = 1; a < 2; {}) {}
+    "#,
+    "[line 4] Error at '{': Expect expression"
+)]
+#[case(
+    r#"
+    // This program would give a compile error
+    // because the initialization clause is not valid
+    for ({}; a < 2; a = a + 1) {}
+    "#,
+    "[line 4] Error at '{': Expect expression"
+)]
+fn test_for_syntactic_errors_report_output_and_exit_65(
+    #[case] source: &str,
+    #[case] expected_output_fragment: &str,
+) {
+    let output = run_source(source);
+
+    assert_eq!(Some(65), output.status.code());
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    let combined = format!("{stdout}{stderr}");
+    assert!(combined.contains(expected_output_fragment));
+}
+
+#[rstest]
+#[case(
+    r#"
     print "the expression below is invalid";
     43 + "hello";
     print "this should not be printed";
