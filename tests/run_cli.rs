@@ -457,6 +457,228 @@ fn test_if_statements_success(#[case] source: &str, #[case] expected_stdout: &st
 #[rstest]
 #[case(
     r#"
+    // This program uses a random boolean to decide
+    // which branch to execute,
+    // and then prints the appropriate string
+    if (true) print "if"; else print "else";
+    "#,
+    "if\n"
+)]
+#[case(
+    r#"
+    // This program initializes age with a random
+    // integer and then prints "adult"
+    // if the age is greater than 18, otherwise it
+    // prints "child"
+    var age = 40;
+    if (age > 18) print "adult"; else print "child";
+    "#,
+    "adult\n"
+)]
+#[case(
+    r#"
+    // This program uses a random boolean to decide
+    // which branch to execute,
+    // and then prints the appropriate string
+    if (false) {
+      print "if block";
+    } else print "else statement";
+
+    if (false) print "if statement"; else {
+      print "else block";
+    }
+    "#,
+    "else statement\nelse block\n"
+)]
+#[case(
+    r#"
+    // This program converts a random integer from
+    // Celsius to Fahrenheit
+    // and prints the result. It also prints a message
+    // based on the temperature.
+    var celsius = 52;
+    var fahrenheit = 0;
+    var isHot = false;
+
+    {
+      fahrenheit = celsius * 9 / 5 + 32;
+      print celsius; print fahrenheit;
+
+      if (celsius > 30) {
+        isHot = true;
+        print "It's a hot day. Stay hydrated!";
+      } else {
+        print "It's cold today. Wear a jacket!";
+      }
+
+      if (isHot) { print "Use sunscreen!"; }
+    }
+    "#,
+    "52\n125.6\nIt's a hot day. Stay hydrated!\nUse sunscreen!\n"
+)]
+fn test_else_statements_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
+    // This program uses a random boolean to decide
+    // which branch to execute,
+    // and then prints the appropriate string
+    if (true) print "if branch";
+    else if (true) print "else-if branch";
+    "#,
+    "if branch\n"
+)]
+#[case(
+    r#"
+    // This program uses a random boolean to decide
+    // which branch to execute,
+    // and then prints the appropriate string
+    if (true) {
+      print "quz";
+    } else if (true) print "quz";
+
+    if (true) print "quz"; else if (true) {
+      print "quz";
+    }
+    "#,
+    "quz\nquz\n"
+)]
+#[case(
+    r#"
+    // This program uses multiple if statements to
+    // categorize a person
+    // into different life stages based on their age
+    var age = 86;
+    var stage = "unknown";
+    if (age < 18) { stage = "child"; }
+    else if (age >= 18) { stage = "adult"; }
+    else if (age >= 65) { stage = "senior"; }
+    else if (age >= 100) { stage = "centenarian"; }
+    print stage;
+    "#,
+    "adult\n"
+)]
+#[case(
+    r#"
+    // This program uses multiple if statements to
+    // determine eligibility for
+    // voting, driving, and drinking based on a random
+    // integer age
+    var age = 65;
+
+    var isAdult = age >= 18;
+    if (isAdult) { print "eligible for voting: true"; }
+    else { print "eligible for voting: false"; }
+
+    if (age < 16) { print "not eligible for driving"; }
+    else if (age < 18) { print "learner's permit"; }
+    else { print "eligible for driving"; }
+
+    if (age >= 21) { print "eligible for drinking"; }
+    else { print "not eligible for drinking"; }
+    "#,
+    "eligible for voting: true\neligible for driving\neligible for drinking\n"
+)]
+fn test_else_if_statements_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
+    // This program uses nested if statements to print
+    // a message
+    if (true) if (true) print "nested true";
+    "#,
+    "nested true\n"
+)]
+#[case(
+    r#"
+    // This program uses nested if statements to print
+    // a message
+    if (true) {
+      if (true) print "foo"; else print "foo";
+    }
+    "#,
+    "foo\n"
+)]
+#[case(
+    r#"
+    // This program categorizes a person into
+    // different life stages based on their age
+    // Then based on the age, it prints a message
+    // about the person's eligibility for voting,
+    // driving, and drinking
+    var stage = "unknown";
+    var age = 34;
+    if (age < 18) {
+        if (age < 13) { stage = "child"; }
+        else if (age < 16) {
+            stage = "young teenager";
+        }
+        else { stage = "teenager"; }
+    }
+    else if (age < 65) {
+        if (age < 30) { stage = "young adult"; }
+        else if (age < 50) { stage = "adult"; }
+        else { stage = "middle-aged adult"; }
+    }
+    else { stage = "senior"; }
+    print stage;
+
+    var isAdult = age >= 18;
+    if (isAdult) {
+        print "eligible for voting: true";
+        if (age < 25) {
+            print "first-time voter: likely";
+        }
+        else { print "first-time voter: unlikely"; }
+    }
+    else { print "eligible for voting: false"; }
+
+    if (age < 16) { print "not eligible for driving"; }
+    else if (age < 18) {
+        print "eligible for driving: learner's permit";
+        if (age < 17) {
+            print "supervised driving required";
+        }
+        else {
+            print "driving allowed with restrictions";
+        }
+    }
+    else { print "eligible for driving"; }
+
+    if (age < 21) {
+        print "not eligible for drinking";
+    }
+    else {
+        print "eligible for drinking";
+        if (age < 25) {
+            print "remember: drink responsibly!";
+        }
+    }
+    "#,
+    "adult\neligible for voting: true\nfirst-time voter: unlikely\neligible for driving\neligible for drinking\n"
+)]
+#[case(
+    r#"
+    // This program uses nested if statements to print
+    // a message
+    if (true) if (false) print "foo";
+    else print "hello";
+    "#,
+    "hello\n"
+)]
+fn test_nested_if_statements_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
     print "the expression below is invalid";
     43 + "hello";
     print "this should not be printed";
