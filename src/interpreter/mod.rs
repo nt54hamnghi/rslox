@@ -120,6 +120,16 @@ impl stmt::Visitor for Interpreter {
 
         Ok(())
     }
+
+    fn visit_while_stmt(&mut self, stmt: &stmt::While) -> Self::Output {
+        loop {
+            let cond = self.evaluate(&stmt.condition)?;
+            if !cond.is_truthy() {
+                break Ok(());
+            }
+            self.execute(&stmt.body)?;
+        }
+    }
 }
 
 impl expr::Visitor for Interpreter {

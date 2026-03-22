@@ -4,7 +4,7 @@ use std::vec;
 use crate::Value;
 use crate::error::StaticError;
 use crate::parser::expr::{Assign, Binary, ExprNode, Grouping, Literal, Logical, Unary, Variable};
-use crate::parser::stmt::{Block, Expression, If, Print, StmtNode, Var};
+use crate::parser::stmt::{Block, Expression, If, Print, StmtNode, Var, While};
 use crate::scanner::token::{Token, TokenType};
 
 pub mod expr;
@@ -102,8 +102,11 @@ impl Parser {
         Ok(Var::new(name, init).into())
     }
 
-    // statement → exprStmt | ifStmt | printStmt | block ;
+    // statement → exprStmt | whileStmt | ifStmt | printStmt | block ;
     fn statement(&mut self) -> Result<StmtNode, StaticError> {
+        if self.next_if(TokenType::While).is_some() {
+            return self.while_statement();
+        }
         if self.next_if(TokenType::If).is_some() {
             return self.if_statement();
         }
@@ -114,6 +117,20 @@ impl Parser {
             return self.block_statement();
         }
         self.expression_statement()
+    }
+
+    // whileStmt → "while" "(" expression ")" statement ;
+    fn while_statement(&mut self) -> Result<StmtNode, StaticError> {
+        self.next_ok(TokenType::LeftParen, "Expect '(' after 'while'.".into())?;
+        let cond = self.expression()?;
+        self.next_ok(
+            TokenType::RightParen,
+            "Expect ')' after while condition.".into(),
+        )?;
+
+        let body = self.statement()?;
+
+        Ok(While::new(cond, body).into())
     }
 
     // ifStmt → "if" "(" expression ")" statement ( "else" statement )? ;
@@ -467,6 +484,7 @@ mod tests {
             StmtNode::Var(_var) => todo!(),
             StmtNode::Block(_block) => todo!(),
             StmtNode::If(_if) => todo!(),
+            StmtNode::While(_) => todo!(),
         }
     }
 

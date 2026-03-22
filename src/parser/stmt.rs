@@ -11,6 +11,7 @@ pub trait Visitor {
     fn visit_expression_stmt(&mut self, stmt: &Expression) -> Self::Output;
     fn visit_var_stmt(&mut self, stmt: &Var) -> Self::Output;
     fn visit_if_stmt(&mut self, stmt: &If) -> Self::Output;
+    fn visit_while_stmt(&mut self, stmt: &While) -> Self::Output;
     fn visit_block_stmt(&mut self, stmt: &Block) -> Self::Output;
 }
 
@@ -20,6 +21,7 @@ pub enum StmtNode {
     Expression(Expression),
     Var(Var),
     If(If),
+    While(While),
     Block(Block),
 }
 
@@ -30,7 +32,8 @@ impl Stmt for StmtNode {
             StmtNode::Expression(expression) => expression.accept(visitor),
             StmtNode::Var(var) => var.accept(visitor),
             StmtNode::Block(block) => block.accept(visitor),
-            StmtNode::If(ifs) => ifs.accept(visitor),
+            StmtNode::If(if_stmt) => if_stmt.accept(visitor),
+            StmtNode::While(while_stmt) => while_stmt.accept(visitor),
         }
     }
 }
@@ -122,8 +125,35 @@ impl If {
 }
 
 impl From<If> for StmtNode {
-    fn from(ifs: If) -> Self {
-        Self::If(ifs)
+    fn from(if_stmt: If) -> Self {
+        Self::If(if_stmt)
+    }
+}
+
+#[derive(Debug)]
+pub struct While {
+    pub condition: Box<ExprNode>,
+    pub body: Box<StmtNode>,
+}
+
+impl Stmt for While {
+    fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
+        visitor.visit_while_stmt(&self)
+    }
+}
+
+impl While {
+    pub fn new(condition: ExprNode, body: StmtNode) -> Self {
+        Self {
+            condition: Box::new(condition),
+            body: Box::new(body),
+        }
+    }
+}
+
+impl From<While> for StmtNode {
+    fn from(while_stmt: While) -> Self {
+        Self::While(while_stmt)
     }
 }
 

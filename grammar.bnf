@@ -4,11 +4,14 @@ declaration    → varDecl
                | statement ;
 
 statement      → exprStmt
+               | whileStmt
                | ifStmt
                | printStmt
                | block ;
 
 block          → "{" declaration* "}" ;
+
+whileStmt      → "while" "(" expression ")" statement ;
 
 ifStmt         → "if" "(" expression ")" statement
                ( "else" statement )? ;

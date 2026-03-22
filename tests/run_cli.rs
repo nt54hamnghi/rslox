@@ -814,6 +814,75 @@ fn test_logical_and_operator_success(#[case] source: &str, #[case] expected_stdo
 #[rstest]
 #[case(
     r#"
+    // This program uses a while loop to print the
+    // numbers from 0 to N
+    // The assignment operation returns the assigned
+    // value
+    var hello = 0;
+    while (hello < 3) print hello = hello + 1;
+    "#,
+    "1\n2\n3\n"
+)]
+#[case(
+    r#"
+    // This program uses a while loop to print the
+    // numbers from 0 to 3
+    // The statement inside the block is executed
+    // every time the loop condition is true
+    var foo = 0;
+    while (foo < 3) {
+      print foo;
+      foo = foo + 1;
+    }
+    "#,
+    "0\n1\n2\n"
+)]
+#[case(
+    r#"
+    // This program uses a while loop to calculate the
+    // factorial of 5
+    // The first while loop never runs because the
+    // condition is false
+    while (false) { print "should not print"; }
+
+    var product = 1;
+    var i = 1;
+
+    while (i <= 5) {
+      product = product * i;
+      i = i + 1;
+    }
+
+    print "Factorial of 5: "; print product;
+    "#,
+    "Factorial of 5: \n120\n"
+)]
+#[case(
+    r#"
+    // This program uses a while loop to generate and
+    // print the first N Fibonacci numbers
+    var n = 10;
+    var fm = 0;
+    var fn = 1;
+    var index = 0;
+
+    while (index < n) {
+        print fm;
+        var temp = fm;
+        fm = fn;
+        fn = temp + fn;
+        index = index + 1;
+    }
+    "#,
+    "0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n"
+)]
+fn test_while_statements_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
     print "the expression below is invalid";
     43 + "hello";
     print "this should not be printed";
