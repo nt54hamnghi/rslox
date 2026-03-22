@@ -12,6 +12,7 @@ pub trait Visitor {
     fn visit_unary_expr(&mut self, expr: &Unary) -> Self::Output;
     fn visit_variable_expr(&self, expr: &Variable) -> Self::Output;
     fn visit_assign_expr(&mut self, expr: &Assign) -> Self::Output;
+    fn visit_logical_expr(&mut self, expr: &Logical) -> Self::Output;
     fn visit_binary_expr(&mut self, expr: &Binary) -> Self::Output;
 }
 
@@ -19,6 +20,7 @@ pub trait Visitor {
 pub enum ExprNode {
     Grouping(Grouping),
     Binary(Binary),
+    Logical(Logical),
     Unary(Unary),
     Variable(Variable),
     Assign(Assign),
@@ -34,6 +36,7 @@ impl Expr for ExprNode {
             ExprNode::Literal(literal) => literal.accept(v),
             ExprNode::Variable(variable) => variable.accept(v),
             ExprNode::Assign(assign) => assign.accept(v),
+            ExprNode::Logical(logical) => logical.accept(v),
         }
     }
 }
@@ -101,6 +104,35 @@ pub struct Unary {
 impl Expr for Unary {
     fn accept<V: Visitor>(&self, v: &mut V) -> V::Output {
         v.visit_unary_expr(self)
+    }
+}
+
+#[derive(Debug)]
+pub struct Logical {
+    pub left: Box<ExprNode>,
+    pub operator: Token,
+    pub right: Box<ExprNode>,
+}
+
+impl Expr for Logical {
+    fn accept<V: Visitor>(&self, v: &mut V) -> V::Output {
+        v.visit_logical_expr(self)
+    }
+}
+
+impl Logical {
+    pub fn new(left: ExprNode, operator: Token, right: ExprNode) -> Self {
+        Self {
+            left: Box::new(left),
+            operator,
+            right: Box::new(right),
+        }
+    }
+}
+
+impl From<Logical> for ExprNode {
+    fn from(logical: Logical) -> Self {
+        Self::Logical(logical)
     }
 }
 

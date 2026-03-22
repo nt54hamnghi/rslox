@@ -56,6 +56,10 @@ impl Visitor for AstPrinter {
     fn visit_assign_expr(&mut self, _expr: &super::expr::Assign) -> Self::Output {
         todo!()
     }
+
+    fn visit_logical_expr(&mut self, _expr: &super::expr::Logical) -> Self::Output {
+        todo!()
+    }
 }
 
 pub fn print_example() {

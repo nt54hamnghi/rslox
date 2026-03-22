@@ -227,6 +227,16 @@ impl expr::Visitor for Interpreter {
             ),
         }
     }
+
+    fn visit_logical_expr(&mut self, expr: &expr::Logical) -> Self::Output {
+        let left = self.evaluate(&expr.left)?;
+
+        match expr.operator.typ {
+            TokenType::Or if left.is_truthy() => Ok(left),
+            TokenType::And if !left.is_truthy() => Ok(left),
+            _ => self.evaluate(&expr.right),
+        }
+    }
 }
 
 #[cfg(test)]

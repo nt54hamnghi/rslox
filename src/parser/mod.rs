@@ -3,7 +3,7 @@ use std::vec;
 
 use crate::Value;
 use crate::error::StaticError;
-use crate::parser::expr::{Assign, Binary, ExprNode, Grouping, Literal, Unary, Variable};
+use crate::parser::expr::{Assign, Binary, ExprNode, Grouping, Literal, Logical, Unary, Variable};
 use crate::parser::stmt::{Block, Expression, If, Print, StmtNode, Var};
 use crate::scanner::token::{Token, TokenType};
 
@@ -168,9 +168,9 @@ impl Parser {
         self.assignment()
     }
 
-    /// expression → equality ;
+    /// assignment → IDENTIFIER "=" assignment | logic_or ;
     fn assignment(&mut self) -> Result<ExprNode, StaticError> {
-        let mut expr = self.equality()?;
+        let mut expr = self.logic_or()?;
 
         if let Some(equals) = self.next_if(TokenType::Equal) {
             let value = self.assignment()?;
@@ -184,6 +184,30 @@ impl Parser {
 
             let name = variable.name.clone();
             expr = Assign::new(name, value).into();
+        }
+
+        Ok(expr)
+    }
+
+    /// logic_or → logic_and ( "or" logic_and )* ;
+    fn logic_or(&mut self) -> Result<ExprNode, StaticError> {
+        let mut expr = self.logic_and()?;
+
+        while let Some(operator) = self.next_match(&[TokenType::Or]) {
+            let right = self.logic_and()?;
+            expr = Logical::new(expr, operator, right).into();
+        }
+
+        Ok(expr)
+    }
+
+    /// logic_and → equality ( "and" equality )* ;
+    fn logic_and(&mut self) -> Result<ExprNode, StaticError> {
+        let mut expr = self.equality()?;
+
+        while let Some(operator) = self.next_match(&[TokenType::Or]) {
+            let right = self.equality()?;
+            expr = Logical::new(expr, operator, right).into();
         }
 
         Ok(expr)
