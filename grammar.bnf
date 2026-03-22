@@ -4,12 +4,17 @@ declaration    → varDecl
                | statement ;
 
 statement      → exprStmt
+               | forStmt
                | whileStmt
                | ifStmt
                | printStmt
                | block ;
 
 block          → "{" declaration* "}" ;
+
+forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
+                 expression? ";"
+                 expression? ")" statement ;
 
 whileStmt      → "while" "(" expression ")" statement ;
 

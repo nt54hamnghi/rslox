@@ -883,6 +883,78 @@ fn test_while_statements_success(#[case] source: &str, #[case] expected_stdout: 
 #[rstest]
 #[case(
     r#"
+    // This program uses a for loop to print the
+    // numbers from 0 to 3
+    // The assignment operation returns the assigned
+    // value
+    for (var foo = 0; foo < 3;) print foo = foo + 1;
+    "#,
+    "1\n2\n3\n"
+)]
+#[case(
+    r#"
+    // This program uses a for loop to print the
+    // numbers from 0 to 3
+    for (var foo = 0; foo < 3; foo = foo + 1) {
+      print foo;
+    }
+    "#,
+    "0\n1\n2\n"
+)]
+#[case(
+    r#"
+    // This program uses a for loop to print the
+    // numbers from 0 to 2
+    // The loop initializer is ignored in this loop
+    var bar = 0;
+    for (; bar < 2; bar = bar + 1) print bar;
+
+    // This program uses a for loop to print the
+    // numbers from 0 to 2
+    // The loop increment clause is ignored in this
+    // loop
+    for (var foo = 0; foo < 2;) {
+      print foo;
+      foo = foo + 1;
+    }
+    "#,
+    "0\n1\n0\n1\n"
+)]
+#[case(
+    r#"
+    // This program uses for loops and block scopes
+    // to print the updates to the same variable
+    var baz = "after";
+    {
+      var baz = "before";
+
+      for (var baz = 0; baz < 1; baz = baz + 1) {
+        print baz;
+        var baz = -1;
+        print baz;
+      }
+    }
+
+    {
+      for (var baz = 0; baz > 0; baz = baz + 1) {}
+
+      var baz = "after";
+      print baz;
+
+      for (baz = 0; baz < 1; baz = baz + 1) {
+        print baz;
+      }
+    }
+    "#,
+    "0\n-1\nafter\n0\n"
+)]
+fn test_for_statements_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
     print "the expression below is invalid";
     43 + "hello";
     print "this should not be printed";

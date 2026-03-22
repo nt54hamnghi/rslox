@@ -102,8 +102,11 @@ impl Parser {
         Ok(Var::new(name, init).into())
     }
 
-    // statement → exprStmt | whileStmt | ifStmt | printStmt | block ;
+    // statement → exprStmt | forStmt | whileStmt | ifStmt | printStmt | block ;
     fn statement(&mut self) -> Result<StmtNode, StaticError> {
+        if self.next_if(TokenType::For).is_some() {
+            return self.for_statement();
+        }
         if self.next_if(TokenType::While).is_some() {
             return self.while_statement();
         }
@@ -119,7 +122,54 @@ impl Parser {
         self.expression_statement()
     }
 
-    // whileStmt → "while" "(" expression ")" statement ;
+    /// forStmt → "for" "(" ( varDecl | exprStmt | ";" ) expression? ";" expression? ")" statement ;
+    fn for_statement(&mut self) -> Result<StmtNode, StaticError> {
+        self.next_ok(TokenType::LeftParen, "Expect '(' after 'for'.".into())?;
+
+        // parse initializer
+        let init = if self.next_if(TokenType::Semicolon).is_some() {
+            None
+        } else if self.next_if(TokenType::Var).is_some() {
+            Some(self.var_declaration()?)
+        } else {
+            Some(self.expression_statement()?)
+        };
+
+        // parse condition
+        // cond is true by default, and is set if there's a condition expression
+        let mut cond = ExprNode::Literal(Value::from(true).into());
+        if self.next_if(TokenType::Semicolon).is_none() {
+            cond = self.expression()?;
+            self.next_ok(
+                TokenType::Semicolon,
+                "Expect ';' after loop condition.".into(),
+            )?;
+        };
+
+        // parse increment
+        let mut incr = None;
+        if self.next_if(TokenType::RightParen).is_none() {
+            incr = Some(self.expression()?);
+            self.next_ok(
+                TokenType::RightParen,
+                "Expect ')' after for clauses.".into(),
+            )?;
+        };
+
+        let mut body = self.statement()?;
+
+        if let Some(incr) = incr {
+            body = Block::new(vec![body, Expression::new(incr).into()]).into();
+        }
+        body = While::new(cond, body).into();
+        if let Some(init) = init {
+            body = Block::new(vec![init, body]).into();
+        }
+
+        Ok(body)
+    }
+
+    /// whileStmt → "while" "(" expression ")" statement ;
     fn while_statement(&mut self) -> Result<StmtNode, StaticError> {
         self.next_ok(TokenType::LeftParen, "Expect '(' after 'while'.".into())?;
         let cond = self.expression()?;
