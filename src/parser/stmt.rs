@@ -16,7 +16,7 @@ pub trait Visitor {
     fn visit_block_stmt(&mut self, stmt: &Block) -> Self::Output;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum StmtNode {
     Print(Print),
     Expression(Expression),
@@ -41,7 +41,7 @@ impl Stmt for StmtNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Print {
     pub expr: Box<ExprNode>,
 }
@@ -66,7 +66,7 @@ impl From<Print> for StmtNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Var {
     pub name: Token,
     pub initializer: Option<Box<ExprNode>>,
@@ -93,11 +93,11 @@ impl From<Var> for StmtNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Function {
-    name: Token,
-    parameters: Vec<Token>,
-    body: Vec<StmtNode>,
+    pub name: Token,
+    pub parameters: Vec<Token>,
+    pub body: Vec<StmtNode>,
 }
 
 impl Stmt for Function {
@@ -122,7 +122,7 @@ impl From<Function> for StmtNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Block {
     pub statements: Vec<StmtNode>,
 }
@@ -133,7 +133,7 @@ impl Stmt for Block {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct If {
     pub condition: Box<ExprNode>,
     pub then_branch: Box<StmtNode>,
@@ -162,7 +162,7 @@ impl From<If> for StmtNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct While {
     pub condition: Box<ExprNode>,
     pub body: Box<StmtNode>,
@@ -201,7 +201,7 @@ impl From<Block> for StmtNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Expression {
     pub expr: Box<ExprNode>,
 }

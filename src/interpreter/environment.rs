@@ -1,13 +1,17 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::Object;
 use crate::interpreter::error::RuntimeError;
 use crate::scanner::token::Token;
 
+pub(super) type EnvironmentRef = Rc<RefCell<Environment>>;
+
 #[derive(Debug, Default)]
 pub(super) struct Environment {
     pub(super) values: HashMap<String, Object>,
-    pub(super) enclosing: Option<Box<Environment>>,
+    pub(super) enclosing: Option<EnvironmentRef>,
 }
 
 impl Environment {
@@ -20,7 +24,7 @@ impl Environment {
     }
 
     /// Creates a new [`Environment`] with the given [`Environment`] as its enclosing scope.
-    pub(super) fn with_enclosing(env: Box<Environment>) -> Self {
+    pub(super) fn with_enclosing(env: EnvironmentRef) -> Self {
         Self {
             values: HashMap::new(),
             enclosing: Some(env),
@@ -43,7 +47,7 @@ impl Environment {
         }
 
         if let Some(enclosing) = self.enclosing.as_deref() {
-            return enclosing.get(token);
+            return enclosing.borrow().get(token);
         }
 
         let msg = format!("Undefined variable '{}'.", var_name);
@@ -58,11 +62,19 @@ impl Environment {
             return Ok(());
         }
 
-        if let Some(enclosing) = self.enclosing.as_deref_mut() {
-            return enclosing.assign(token, value);
+        if let Some(enclosing) = self.enclosing.as_deref() {
+            return enclosing.borrow_mut().assign(token, value);
         }
 
         let msg = format!("Undefined variable '{}'.", var_name);
         Err(RuntimeError::new(token.clone(), msg))
     }
 }
+
+// /// Creates a new [`Environment`] with the given [`Environment`] as its enclosing scope.
+// pub(super) fn with_enclosing(env: EnvironmentRef) -> Self {
+//     Self {
+//         values: HashMap::new(),
+//         enclosing: Some(env),
+//     }
+// }

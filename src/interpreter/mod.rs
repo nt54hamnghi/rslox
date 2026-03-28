@@ -1,11 +1,15 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ops::Not;
 use std::rc::Rc;
 
+use crate::interpreter::callable::Callable;
+use crate::interpreter::callable::function::LoxFunction;
 use crate::interpreter::callable::native::ClockNativeFunction;
-use crate::interpreter::environment::Environment;
+use crate::interpreter::environment::{Environment, EnvironmentRef};
 use crate::interpreter::error::RuntimeError;
 use crate::parser::expr::{self, Binary, Expr, ExprNode};
-use crate::parser::stmt::{self, Stmt, StmtNode};
+use crate::parser::stmt::{self, Function, Stmt, StmtNode};
 use crate::scanner::token::{Token, TokenType};
 use crate::{Object, Value};
 
@@ -30,7 +34,7 @@ impl Object {
 
 #[derive(Debug)]
 pub struct Interpreter {
-    environment: Box<Environment>,
+    environment: EnvironmentRef,
 }
 
 impl Interpreter {
@@ -42,7 +46,7 @@ impl Interpreter {
         );
 
         Self {
-            environment: Box::new(globals),
+            environment: Rc::new(RefCell::new(globals)),
         }
     }
 
@@ -90,13 +94,19 @@ impl stmt::Visitor for Interpreter {
             .transpose()?
             .unwrap_or(Object::Primitive(Value::Nil));
 
-        self.environment.define(stmt.name.lexeme.clone(), value);
+        self.environment
+            .borrow_mut()
+            .define(stmt.name.lexeme.clone(), value);
 
         Ok(())
     }
 
     fn visit_function_stmt(&mut self, stmt: &stmt::Function) -> Self::Output {
-        todo!()
+        let function = LoxFunction::new(stmt.clone());
+        self.environment
+            .borrow_mut()
+            .define(stmt.name.lexeme.clone(), function.into());
+        Ok(())
     }
 
     fn visit_if_stmt(&mut self, stmt: &stmt::If) -> Self::Output {
@@ -120,20 +130,87 @@ impl stmt::Visitor for Interpreter {
     }
 
     fn visit_block_stmt(&mut self, stmt: &stmt::Block) -> Self::Output {
-        let outer = std::mem::take(&mut self.environment);
-        self.environment = Box::new(Environment::with_enclosing(outer));
+        self.execute_block(&stmt.statements)
+    }
+}
 
-        for stmt in &stmt.statements {
-            if let Err(err) = self.execute(stmt) {
-                let outer = self.environment.enclosing.take().unwrap();
-                self.environment = outer;
+/// A guard that restores the interpreter's previous environment when temporary
+/// block execution ends.
+struct BlockGuard<'i> {
+    interpreter: &'i mut Interpreter,
+    previous: EnvironmentRef,
+}
+
+impl<'i> Drop for BlockGuard<'i> {
+    fn drop(&mut self) {
+        self.interpreter.environment = self.previous.clone();
+    }
+}
+
+impl Interpreter {
+    /// Creates a fresh environment for a new lexical block scope.
+    ///
+    /// This is used for ordinary `{ ... }` blocks. The new environment is
+    /// enclosed by the current one so name lookup follows the surrounding scope
+    /// chain. The returned [`BlockGuard`] owns the previous environment and
+    /// restores it when dropped.
+    fn enter_block<'i>(&'i mut self) -> BlockGuard<'i> {
+        let current = self.environment.clone();
+        let new_enclosed = Environment::with_enclosing(current.clone());
+        self.environment = Rc::new(RefCell::new(new_enclosed));
+
+        BlockGuard {
+            interpreter: self,
+            previous: current.clone(),
+        }
+    }
+
+    /// Executes statements in a new lexical block scope.
+    ///
+    /// Each statement runs with a new environment whose enclosing parent is the
+    /// environment active at the call site. The previous environment is restored
+    /// automatically, even if execution returns early with an error.
+    fn execute_block(&mut self, stmts: &[StmtNode]) -> Result<(), RuntimeError> {
+        let guard = self.enter_block();
+        for stmt in stmts {
+            if let Err(err) = guard.interpreter.execute(stmt) {
                 return Err(err);
             }
         }
+        Ok(())
+    }
 
-        let outer = self.environment.enclosing.take().unwrap();
-        self.environment = outer;
+    /// Installs a caller-provided environment for block execution.
+    ///
+    /// This is used when the caller has already prepared the environment, such as
+    /// a function call frame with bound parameters. The returned [`BlockGuard`]
+    /// restores the previous interpreter environment on drop.
+    fn enter_block_with<'i>(&'i mut self, env: Environment) -> BlockGuard<'i> {
+        let current = self.environment.clone();
+        self.environment = Rc::new(RefCell::new(env));
 
+        BlockGuard {
+            interpreter: self,
+            previous: current.clone(),
+        }
+    }
+
+    /// Executes statements using an environment supplied by the caller.
+    ///
+    /// Unlike [`Interpreter::execute_block`], this does not allocate a child
+    /// environment on its own. It swaps in `env`, executes the statements, and
+    /// restores the previous environment afterward.
+    fn execute_block_with(
+        &mut self,
+        stmts: &[StmtNode],
+        env: Environment,
+    ) -> Result<(), RuntimeError> {
+        let guard = self.enter_block_with(env);
+        for stmt in stmts {
+            if let Err(err) = guard.interpreter.execute(stmt) {
+                return Err(err);
+            }
+        }
         Ok(())
     }
 }
@@ -178,12 +255,14 @@ impl expr::Visitor for Interpreter {
     }
 
     fn visit_variable_expr(&self, expr: &expr::Variable) -> Self::Output {
-        self.environment.get(&expr.name)
+        self.environment.borrow().get(&expr.name)
     }
 
     fn visit_assign_expr(&mut self, expr: &expr::Assign) -> Self::Output {
         let value = self.evaluate(&expr.value)?;
-        self.environment.assign(&expr.name, value.clone())?;
+        self.environment
+            .borrow_mut()
+            .assign(&expr.name, value.clone())?;
         Ok(value)
     }
 

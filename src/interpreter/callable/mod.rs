@@ -3,6 +3,7 @@ use std::fmt::{Debug, Display};
 use crate::Object;
 use crate::interpreter::Interpreter;
 
+pub mod function;
 pub mod native;
 
 /// Represents a runtime value that can be invoked like a function.

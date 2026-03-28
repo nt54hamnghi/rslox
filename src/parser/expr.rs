@@ -17,7 +17,7 @@ pub trait Visitor {
     fn visit_binary_expr(&mut self, expr: &Binary) -> Self::Output;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ExprNode {
     Grouping(Grouping),
     Call(Call),
@@ -44,7 +44,7 @@ impl Expr for ExprNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Grouping {
     pub expression: Box<ExprNode>,
 }
@@ -69,7 +69,7 @@ impl From<Grouping> for ExprNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Call {
     pub callee: Box<ExprNode>,
     pub paren: Token,
@@ -98,7 +98,7 @@ impl From<Call> for ExprNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Binary {
     pub left: Box<ExprNode>,
     pub operator: Token,
@@ -127,7 +127,7 @@ impl From<Binary> for ExprNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Unary {
     pub operator: Token,
     pub right: Box<ExprNode>,
@@ -139,7 +139,7 @@ impl Expr for Unary {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Logical {
     pub left: Box<ExprNode>,
     pub operator: Token,
@@ -183,7 +183,7 @@ impl From<Unary> for ExprNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Variable {
     pub name: Token,
 }
@@ -206,7 +206,7 @@ impl From<Variable> for ExprNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Assign {
     pub name: Token,
     pub value: Box<ExprNode>,

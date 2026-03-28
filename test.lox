@@ -1,7 +1,24 @@
-var start = clock();
-for (var i = 0; i < 1000000; i = i + 1) {
-    print i;
+// var start = clock();
+// for (var i = 0; i < 1000000; i = i + 1) {
+//     print i;
+// }
+// var elapsed = clock() - start;
+// print "Took: ";
+// print elapsed;
+
+// var msg = "hello";
+// print msg + " world";
+// {
+//     var msg = "hi";
+//     print msg + " world";
+//     msg = "ola";
+// }
+// print msg + " world";
+
+fun add(a, b) {
+    print a + b;
 }
-var elapsed = clock() - start;
-print "Took: ";
-print elapsed;
+
+add(1, 2);
+print add;
+print clock;
