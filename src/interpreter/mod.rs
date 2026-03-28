@@ -95,22 +95,8 @@ impl stmt::Visitor for Interpreter {
         Ok(())
     }
 
-    fn visit_block_stmt(&mut self, stmt: &stmt::Block) -> Self::Output {
-        let outer = std::mem::take(&mut self.environment);
-        self.environment = Box::new(Environment::with_enclosing(outer));
-
-        for stmt in &stmt.statements {
-            if let Err(err) = self.execute(stmt) {
-                let outer = self.environment.enclosing.take().unwrap();
-                self.environment = outer;
-                return Err(err);
-            }
-        }
-
-        let outer = self.environment.enclosing.take().unwrap();
-        self.environment = outer;
-
-        Ok(())
+    fn visit_function_stmt(&mut self, stmt: &stmt::Function) -> Self::Output {
+        todo!()
     }
 
     fn visit_if_stmt(&mut self, stmt: &stmt::If) -> Self::Output {
@@ -131,6 +117,24 @@ impl stmt::Visitor for Interpreter {
             }
             self.execute(&stmt.body)?;
         }
+    }
+
+    fn visit_block_stmt(&mut self, stmt: &stmt::Block) -> Self::Output {
+        let outer = std::mem::take(&mut self.environment);
+        self.environment = Box::new(Environment::with_enclosing(outer));
+
+        for stmt in &stmt.statements {
+            if let Err(err) = self.execute(stmt) {
+                let outer = self.environment.enclosing.take().unwrap();
+                self.environment = outer;
+                return Err(err);
+            }
+        }
+
+        let outer = self.environment.enclosing.take().unwrap();
+        self.environment = outer;
+
+        Ok(())
     }
 }
 

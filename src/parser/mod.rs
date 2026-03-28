@@ -1,3 +1,4 @@
+use std::fmt::format;
 use std::iter::Peekable;
 use std::vec;
 
@@ -6,14 +7,15 @@ use crate::error::StaticError;
 use crate::parser::expr::{
     Assign, Binary, Call, ExprNode, Grouping, Literal, Logical, Unary, Variable,
 };
-use crate::parser::stmt::{Block, Expression, If, Print, StmtNode, Var, While};
+use crate::parser::stmt::{Block, Expression, Function, If, Print, StmtNode, Var, While};
 use crate::scanner::token::{Token, TokenType};
 
 pub mod expr;
 pub mod printer;
 pub mod stmt;
 
-pub const MAX_ARGUMENT_COUNT: usize = 255;
+pub const MAX_PARAMETER_COUNT: usize = 255;
+pub const MAX_ARGUMENT_COUNT: usize = MAX_PARAMETER_COUNT;
 
 pub struct Parser {
     tokens: Peekable<vec::IntoIter<Token>>,
@@ -84,8 +86,11 @@ impl Parser {
         }
     }
 
-    // declaration → varDecl | statement ;
+    // declaration → varDecl | funDecl | statement ;
     fn declaration(&mut self) -> Result<StmtNode, StaticError> {
+        if self.next_if(TokenType::Fun).is_some() {
+            return self.function_declaration("function");
+        }
         if self.next_if(TokenType::Var).is_some() {
             return self.var_declaration();
         }
@@ -106,6 +111,42 @@ impl Parser {
         Ok(Var::new(name, init).into())
     }
 
+    /// funDecl → "fun" function ;
+    /// function → IDENTIFIER "(" parameters? ")" block ;
+    /// parameters → IDENTIFIER ( "," IDENTIFIER )* ;
+    fn function_declaration(&mut self, kind: &str) -> Result<StmtNode, StaticError> {
+        let name = self.next_ok(TokenType::Identifier, format!("Expect {kind} name."))?;
+        self.next_ok(
+            TokenType::LeftParen,
+            format!("Expect '(' after {kind} name."),
+        )?;
+
+        let mut parameters = Vec::new();
+        if !self.peek_check(TokenType::RightParen) {
+            loop {
+                if parameters.len() >= MAX_PARAMETER_COUNT {
+                    let error = self.error("Can't have more than 255 parameters.".into());
+                    eprintln!("{error}");
+                }
+                let param = self.next_ok(TokenType::Identifier, "Expect parameter name.".into())?;
+                parameters.push(param);
+                if self.next_if(TokenType::Comma).is_none() {
+                    break;
+                }
+            }
+        }
+        self.next_ok(TokenType::RightParen, "Expect ')' after parameters.".into())?;
+        // consume the { at the beginning of the body before calling block().
+        // because block() assumes the left brace token has already been matched.
+        self.next_ok(
+            TokenType::LeftBrace,
+            format!("Expect '{{' before {kind} body."),
+        )?;
+        let body = self.block_statement()?;
+
+        Ok(Function::new(name, parameters, body).into())
+    }
+
     // statement → exprStmt | forStmt | whileStmt | ifStmt | printStmt | block ;
     fn statement(&mut self) -> Result<StmtNode, StaticError> {
         if self.next_if(TokenType::For).is_some() {
@@ -121,7 +162,8 @@ impl Parser {
             return self.print_statement();
         }
         if self.next_if(TokenType::LeftBrace).is_some() {
-            return self.block_statement();
+            let stmts = self.block_statement()?;
+            return Ok(Block::new(stmts).into());
         }
         self.expression_statement()
     }
@@ -207,7 +249,7 @@ impl Parser {
     }
 
     // block → "{" declaration* "}" ;
-    fn block_statement(&mut self) -> Result<StmtNode, StaticError> {
+    fn block_statement(&mut self) -> Result<Vec<StmtNode>, StaticError> {
         let mut statements = Vec::new();
         while !self.peek_check(TokenType::RightBrace) && !self.is_at_end() {
             let stmt = self.declaration()?;
@@ -215,7 +257,7 @@ impl Parser {
         }
 
         self.next_ok(TokenType::RightBrace, "Expect '}' after block.".into())?;
-        Ok(Block::new(statements).into())
+        Ok(statements)
     }
 
     // printStmt → "print" expression ";" ;
@@ -364,10 +406,8 @@ impl Parser {
         if !self.peek_check(TokenType::RightParen) {
             loop {
                 if args.len() >= MAX_ARGUMENT_COUNT {
-                    eprintln!(
-                        "{}",
-                        self.error("Can't have more than 255 arguments.".into())
-                    );
+                    let error = self.error("Can't have more than 255 arguments.".into());
+                    eprintln!("{error}");
                 }
 
                 let expr = self.expression()?;
@@ -574,6 +614,7 @@ mod tests {
             StmtNode::Block(_block) => todo!(),
             StmtNode::If(_if) => todo!(),
             StmtNode::While(_) => todo!(),
+            StmtNode::Function(function) => todo!(),
         }
     }
 
