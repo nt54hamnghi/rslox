@@ -1,4 +1,9 @@
-use std::fmt::{Debug, Display};
+use std::{
+    fmt::{Debug, Display},
+    rc::Rc,
+};
+
+use crate::interpreter::callable::Callable;
 
 pub mod cli;
 pub mod error;
@@ -6,7 +11,31 @@ pub mod interpreter;
 pub mod parser;
 pub mod scanner;
 
-#[derive(Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone)]
+pub enum Object {
+    Primitive(Value),
+    Function(Rc<dyn Callable>),
+}
+
+impl<T> From<T> for Object
+where
+    T: Into<Value>,
+{
+    fn from(value: T) -> Self {
+        Object::Primitive(value.into())
+    }
+}
+
+impl Display for Object {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Object::Primitive(value) => Display::fmt(value, f),
+            Object::Function(fun) => Display::fmt(fun, f),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq)]
 pub enum Value {
     Number(f64),
     String(String),

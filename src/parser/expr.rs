@@ -9,6 +9,7 @@ pub trait Visitor {
     type Output;
     fn visit_literal_expr(&self, expr: &Literal) -> Self::Output;
     fn visit_grouping_expr(&mut self, expr: &Grouping) -> Self::Output;
+    fn visit_call_expr(&mut self, expr: &Call) -> Self::Output;
     fn visit_unary_expr(&mut self, expr: &Unary) -> Self::Output;
     fn visit_variable_expr(&self, expr: &Variable) -> Self::Output;
     fn visit_assign_expr(&mut self, expr: &Assign) -> Self::Output;
@@ -19,6 +20,7 @@ pub trait Visitor {
 #[derive(Debug)]
 pub enum ExprNode {
     Grouping(Grouping),
+    Call(Call),
     Binary(Binary),
     Logical(Logical),
     Unary(Unary),
@@ -37,6 +39,7 @@ impl Expr for ExprNode {
             ExprNode::Variable(variable) => variable.accept(v),
             ExprNode::Assign(assign) => assign.accept(v),
             ExprNode::Logical(logical) => logical.accept(v),
+            ExprNode::Call(call) => call.accept(v),
         }
     }
 }
@@ -63,6 +66,35 @@ impl Grouping {
 impl From<Grouping> for ExprNode {
     fn from(grouping: Grouping) -> Self {
         Self::Grouping(grouping)
+    }
+}
+
+#[derive(Debug)]
+pub struct Call {
+    pub callee: Box<ExprNode>,
+    pub paren: Token,
+    pub arguments: Vec<Box<ExprNode>>,
+}
+
+impl Expr for Call {
+    fn accept<V: Visitor>(&self, v: &mut V) -> V::Output {
+        v.visit_call_expr(self)
+    }
+}
+
+impl Call {
+    pub fn new(callee: ExprNode, paren: Token, arguments: Vec<ExprNode>) -> Self {
+        Self {
+            callee: Box::new(callee),
+            paren,
+            arguments: arguments.into_iter().map(Box::new).collect(),
+        }
+    }
+}
+
+impl From<Call> for ExprNode {
+    fn from(call: Call) -> Self {
+        Self::Call(call)
     }
 }
 
@@ -201,7 +233,7 @@ impl From<Assign> for ExprNode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone)]
 pub struct Literal {
     pub value: Value,
 }

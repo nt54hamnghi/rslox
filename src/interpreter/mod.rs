@@ -1,23 +1,27 @@
 use std::ops::Not;
 
-use crate::Value;
 use crate::interpreter::environment::Environment;
 use crate::interpreter::error::RuntimeError;
 use crate::parser::expr::{self, Binary, Expr, ExprNode};
 use crate::parser::stmt::{self, Stmt, StmtNode};
 use crate::scanner::token::{Token, TokenType};
+use crate::{Object, Value};
 
+pub(crate) mod callable;
 mod environment;
 pub mod error;
 
-impl Value {
-    /// Check whether a Lox value is truthy, which is defined as
+impl Object {
+    /// Check whether a Lox object is truthy, which is defined as
     /// `nil` is false, booleans keep their value, and all other values are true.
     fn is_truthy(&self) -> bool {
         match self {
-            Value::Nil => false,
-            Value::Boolean(b) => *b,
-            _ => true,
+            Object::Function(_) => true,
+            Object::Primitive(value) => match value {
+                Value::Nil => false,
+                Value::Boolean(b) => *b,
+                _ => true,
+            },
         }
     }
 }
@@ -32,7 +36,7 @@ fn check_number_operands(left: Value, right: Value, op: Token) -> Result<(f64, f
     Ok((a, b))
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Interpreter {
     environment: Box<Environment>,
 }
@@ -61,7 +65,7 @@ impl Interpreter {
     /// Evaluates a single expression tree.
     ///
     /// Returns the resulting value or a runtime error when evaluation fails.
-    pub fn evaluate(&mut self, expr: &ExprNode) -> Result<Value, RuntimeError> {
+    pub fn evaluate(&mut self, expr: &ExprNode) -> Result<Object, RuntimeError> {
         Expr::accept(expr, self)
     }
 }
@@ -86,7 +90,7 @@ impl stmt::Visitor for Interpreter {
             .as_deref()
             .map(|e| self.evaluate(e))
             .transpose()?
-            .unwrap_or(Value::Nil);
+            .unwrap_or(Object::Primitive(Value::Nil));
 
         self.environment.define(stmt.name.lexeme.clone(), value);
 
@@ -133,11 +137,11 @@ impl stmt::Visitor for Interpreter {
 }
 
 impl expr::Visitor for Interpreter {
-    type Output = Result<Value, RuntimeError>;
+    type Output = Result<Object, RuntimeError>;
 
     /// Produces the value represented by a literal expression.
     fn visit_literal_expr(&self, expr: &expr::Literal) -> Self::Output {
-        Ok(expr.value.clone())
+        Ok(expr.value.clone().into())
     }
 
     /// Evaluates the expression inside grouping parentheses.
@@ -154,7 +158,7 @@ impl expr::Visitor for Interpreter {
         match expr.operator.typ {
             TokenType::Bang => Ok(right.is_truthy().not().into()),
             TokenType::Minus => {
-                let Value::Number(n) = right else {
+                let Object::Primitive(Value::Number(n)) = right else {
                     return Err(RuntimeError::new(
                         expr.operator.clone(),
                         "Operand must be a number.",
@@ -185,8 +189,19 @@ impl expr::Visitor for Interpreter {
     ///
     /// Returns an error for invalid operand types or invalid numeric operations.
     fn visit_binary_expr(&mut self, expr: &Binary) -> Self::Output {
-        let left = self.evaluate(&expr.left)?;
-        let right = self.evaluate(&expr.right)?;
+        let Object::Primitive(left) = self.evaluate(&expr.left)? else {
+            return Err(RuntimeError::new(
+                expr.operator.clone(),
+                "Left operand must be a primitive value.",
+            ));
+        };
+        let Object::Primitive(right) = self.evaluate(&expr.right)? else {
+            return Err(RuntimeError::new(
+                expr.operator.clone(),
+                "Right operand must be a primitive value.",
+            ));
+        };
+
         let op = expr.operator.clone();
 
         match op.typ {
@@ -247,6 +262,35 @@ impl expr::Visitor for Interpreter {
             _ => self.evaluate(&expr.right),
         }
     }
+
+    fn visit_call_expr(&mut self, expr: &expr::Call) -> Self::Output {
+        let Object::Function(callee) = self.evaluate(&expr.callee)? else {
+            return Err(RuntimeError::new(
+                expr.paren.clone(),
+                "Can only call functions and classes.",
+            ));
+        };
+
+        let args = expr
+            .arguments
+            .iter()
+            .map(|arg| self.evaluate(arg))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if args.len() != callee.arity() {
+            return Err(RuntimeError::new(
+                expr.paren.clone(),
+                format!(
+                    "Expected {} arguments but got {}.",
+                    callee.arity(),
+                    args.len()
+                ),
+            ));
+        }
+
+        let res = callee.call(self, args.as_slice());
+        Ok(res)
+    }
 }
 
 #[cfg(test)]
@@ -257,7 +301,14 @@ mod tests {
     use crate::parser::Parser;
     use crate::scanner::{ScanItem, Scanner};
 
-    fn eval_expr(input: &str) -> Result<Value, RuntimeError> {
+    fn assert_primitive_output(expected: Value, actual: Object) {
+        let Object::Primitive(actual) = actual else {
+            panic!("expected primitive output, got function object");
+        };
+        assert_eq!(expected, actual);
+    }
+
+    fn eval_expr(input: &str) -> Result<Object, RuntimeError> {
         let tokens = Scanner::new(input)
             .scan_tokens()
             .filter_map(|r| match r {
@@ -300,7 +351,7 @@ mod tests {
         #[case] expected_output: Value,
     ) {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
-        assert_eq!(expected_output, output);
+        assert_primitive_output(expected_output, output);
     }
 
     #[rstest]
@@ -313,7 +364,7 @@ mod tests {
         #[case] expected_output: Value,
     ) {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
-        assert_eq!(expected_output, output);
+        assert_primitive_output(expected_output, output);
     }
 
     #[rstest]
@@ -323,7 +374,7 @@ mod tests {
     #[case("((false))", Value::Boolean(false))]
     fn test_interpreter_grouping_expressions(#[case] input: &str, #[case] expected_output: Value) {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
-        assert_eq!(expected_output, output);
+        assert_primitive_output(expected_output, output);
     }
 
     #[rstest]
@@ -336,7 +387,7 @@ mod tests {
         #[case] expected_output: Value,
     ) {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
-        assert_eq!(expected_output, output);
+        assert_primitive_output(expected_output, output);
     }
 
     #[rstest]
@@ -349,7 +400,7 @@ mod tests {
         #[case] expected_output: Value,
     ) {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
-        assert_eq!(expected_output, output);
+        assert_primitive_output(expected_output, output);
     }
 
     #[rstest]
@@ -362,7 +413,7 @@ mod tests {
         #[case] expected_output: Value,
     ) {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
-        assert_eq!(expected_output, output);
+        assert_primitive_output(expected_output, output);
     }
 
     #[rstest]
@@ -378,7 +429,7 @@ mod tests {
     )]
     fn test_interpreter_string_concatenation(#[case] input: &str, #[case] expected_output: Value) {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
-        assert_eq!(expected_output, output);
+        assert_primitive_output(expected_output, output);
     }
 
     #[rstest]
@@ -388,7 +439,7 @@ mod tests {
     #[case("79 == (36 + 43)", Value::Boolean(true))]
     fn test_interpreter_equality_operators(#[case] input: &str, #[case] expected_output: Value) {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
-        assert_eq!(expected_output, output);
+        assert_primitive_output(expected_output, output);
     }
 
     #[rstest]
@@ -398,7 +449,7 @@ mod tests {
     #[case("(29 - 55) >= -(36 / 18 + 30)", Value::Boolean(true))]
     fn test_interpreter_relational_operators(#[case] input: &str, #[case] expected_output: Value) {
         let output = eval_expr(input).expect("Expected evaluation to succeed");
-        assert_eq!(expected_output, output);
+        assert_primitive_output(expected_output, output);
     }
 
     #[rstest]

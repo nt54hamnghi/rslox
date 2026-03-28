@@ -3,13 +3,17 @@ use std::vec;
 
 use crate::Value;
 use crate::error::StaticError;
-use crate::parser::expr::{Assign, Binary, ExprNode, Grouping, Literal, Logical, Unary, Variable};
+use crate::parser::expr::{
+    Assign, Binary, Call, ExprNode, Grouping, Literal, Logical, Unary, Variable,
+};
 use crate::parser::stmt::{Block, Expression, If, Print, StmtNode, Var, While};
 use crate::scanner::token::{Token, TokenType};
 
 pub mod expr;
 pub mod printer;
 pub mod stmt;
+
+pub const MAX_ARGUMENT_COUNT: usize = 255;
 
 pub struct Parser {
     tokens: Peekable<vec::IntoIter<Token>>,
@@ -333,14 +337,49 @@ impl Parser {
         Ok(expr)
     }
 
-    /// unary → ( "!" | "-" ) unary | primary ;
+    /// unary → ( "!" | "-" ) unary | call ;
     fn unary(&mut self) -> Result<ExprNode, StaticError> {
         if let Some(operator) = self.next_match(&[TokenType::Bang, TokenType::Minus]) {
             let right = self.unary()?;
             return Ok(Unary::new(operator, right).into());
         }
 
-        self.primary()
+        self.call()
+    }
+
+    /// call → primary ( "(" arguments? ")" )* ;
+    /// arguments → expression ( "," expression )* ;
+    fn call(&mut self) -> Result<ExprNode, StaticError> {
+        let mut expr = self.primary()?;
+
+        while self.next_if(TokenType::LeftParen).is_some() {
+            expr = self.finish_call(expr)?;
+        }
+
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee: ExprNode) -> Result<ExprNode, StaticError> {
+        let mut args = Vec::new();
+        if !self.peek_check(TokenType::RightParen) {
+            loop {
+                if args.len() >= MAX_ARGUMENT_COUNT {
+                    eprintln!(
+                        "{}",
+                        self.error("Can't have more than 255 arguments.".into())
+                    );
+                }
+
+                let expr = self.expression()?;
+                args.push(expr);
+                if self.next_if(TokenType::Comma).is_none() {
+                    break;
+                }
+            }
+        }
+        let paren = self.next_ok(TokenType::RightParen, "Expect ')' after arguments.".into())?;
+
+        Ok(Call::new(callee, paren, args).into())
     }
 
     /// primary → NUMBER | STRING | "true" | "false" | "nil"| "(" expression ")" ;

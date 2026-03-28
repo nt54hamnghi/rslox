@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
-use crate::Value;
+use crate::Object;
 use crate::interpreter::error::RuntimeError;
 use crate::scanner::token::Token;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub(super) struct Environment {
-    pub(super) values: HashMap<String, Value>,
+    pub(super) values: HashMap<String, Object>,
     pub(super) enclosing: Option<Box<Environment>>,
 }
 
@@ -28,15 +28,16 @@ impl Environment {
     }
 
     /// Defines a new variable in the environment by inserting the key-value pair.
-    pub(super) fn define(&mut self, key: String, value: Value) {
+    pub(super) fn define(&mut self, key: String, value: Object) {
         self.values.insert(key, value);
     }
 
     /// Retrieves the value of a variable from the environment.
     ///
     /// Returns a [`RuntimeError`] if the variable is not defined.
-    pub(super) fn get(&self, token: &Token) -> Result<Value, RuntimeError> {
+    pub(super) fn get(&self, token: &Token) -> Result<Object, RuntimeError> {
         let var_name = &token.lexeme;
+
         if let Some(value) = self.values.get(var_name).cloned() {
             return Ok(value);
         }
@@ -49,7 +50,7 @@ impl Environment {
         Err(RuntimeError::new(token.clone(), msg))
     }
 
-    pub(super) fn assign(&mut self, token: &Token, value: Value) -> Result<(), RuntimeError> {
+    pub(super) fn assign(&mut self, token: &Token, value: Object) -> Result<(), RuntimeError> {
         let var_name = &token.lexeme;
 
         if self.values.contains_key(var_name) {

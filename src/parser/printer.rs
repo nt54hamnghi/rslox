@@ -60,6 +60,10 @@ impl Visitor for AstPrinter {
     fn visit_logical_expr(&mut self, _expr: &super::expr::Logical) -> Self::Output {
         todo!()
     }
+
+    fn visit_call_expr(&mut self, _expr: &super::expr::Call) -> Self::Output {
+        todo!()
+    }
 }
 
 pub fn print_example() {
