@@ -1,7 +1,5 @@
-use std::{
-    fmt::{Debug, Display},
-    rc::Rc,
-};
+use std::fmt::{Debug, Display};
+use std::rc::Rc;
 
 use crate::interpreter::callable::Callable;
 

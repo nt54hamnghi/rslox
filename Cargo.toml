@@ -17,7 +17,7 @@ tempdir = "0.3.7"
 
 [lints.rust]
 unsafe_code = { priority = 5, level = "forbid" }
-# unused = { priority = -1, level = "allow" }
+unused = { priority = -1, level = "allow" }
 
 [profile.dev.package.backtrace]
 opt-level = 3

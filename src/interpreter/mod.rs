@@ -1,5 +1,7 @@
 use std::ops::Not;
+use std::rc::Rc;
 
+use crate::interpreter::callable::native::ClockNativeFunction;
 use crate::interpreter::environment::Environment;
 use crate::interpreter::error::RuntimeError;
 use crate::parser::expr::{self, Binary, Expr, ExprNode};
@@ -26,16 +28,6 @@ impl Object {
     }
 }
 
-/// Converts two runtime values into numeric operands for arithmetic/comparison.
-///
-/// Returns a [`RuntimeError`] if either operand is not a number.
-fn check_number_operands(left: Value, right: Value, op: Token) -> Result<(f64, f64), RuntimeError> {
-    let (Value::Number(a), Value::Number(b)) = (left, right) else {
-        return Err(RuntimeError::new(op, "Operands must be numbers."));
-    };
-    Ok((a, b))
-}
-
 #[derive(Debug)]
 pub struct Interpreter {
     environment: Box<Environment>,
@@ -43,8 +35,14 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Self {
+        let mut globals = Environment::new();
+        globals.define(
+            "clock".to_owned(),
+            Object::Function(Rc::new(ClockNativeFunction)),
+        );
+
         Self {
-            environment: Box::new(Environment::new()),
+            environment: Box::new(globals),
         }
     }
 
@@ -291,6 +289,16 @@ impl expr::Visitor for Interpreter {
         let res = callee.call(self, args.as_slice());
         Ok(res)
     }
+}
+
+/// Converts two runtime values into numeric operands for arithmetic/comparison.
+///
+/// Returns a [`RuntimeError`] if either operand is not a number.
+fn check_number_operands(left: Value, right: Value, op: Token) -> Result<(f64, f64), RuntimeError> {
+    let (Value::Number(a), Value::Number(b)) = (left, right) else {
+        return Err(RuntimeError::new(op, "Operands must be numbers."));
+    };
+    Ok((a, b))
 }
 
 #[cfg(test)]
