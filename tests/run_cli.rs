@@ -996,6 +996,64 @@ fn test_functions_with_arguments_success(#[case] source: &str, #[case] expected_
 #[rstest]
 #[case(
     r#"
+    // This program computes the 35th Fibonacci number
+    fun fib(n) {
+      if (n < 2) return n;
+      return fib(n - 2) + fib(n - 1);
+    }
+
+    var start = clock();
+    print fib(10) == 55;
+    print (clock() - start) < 5; // 5 seconds
+    "#,
+    "true\ntrue\n"
+)]
+#[case(
+    r#"
+    // This program uses a return statement inside an
+    // if statement
+    // to return "ok" if the condition is false
+    fun f() {
+      if (false) return "no"; else return "ok";
+    }
+
+    print f();
+    "#,
+    "ok\n"
+)]
+#[case(
+    r#"
+    // This program uses a return statement inside a
+    // while loop
+    // to return "ok" if the condition is false
+    fun f() {
+      while (!true) return "ok";
+    }
+
+    print f();
+    "#,
+    "nil\n"
+)]
+#[case(
+    r#"
+    // This program relies on the return statement
+    // returning nil by default
+    fun f() {
+      return;
+      print "bad";
+    }
+
+    print f();
+    "#,
+    "nil\n"
+)]
+fn test_return_statements_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
     // This program is missing the closing parenthesis
     // for the function call
     // Hence the compiler error
