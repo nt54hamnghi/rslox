@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::rc::Rc;
 
 use crate::interpreter::callable::Callable;
+use crate::interpreter::error::RuntimeEvent;
 use crate::interpreter::{Environment, Interpreter};
 use crate::parser::stmt::Function;
 use crate::{Object, Value};
@@ -18,15 +19,21 @@ impl LoxFunction {
 }
 
 impl Callable for LoxFunction {
-    fn call(&self, interpreter: &mut Interpreter, args: &[Object]) -> Object {
+    fn call(&self, interpreter: &mut Interpreter, args: &[Object]) -> Result<Object, RuntimeEvent> {
         let mut env = Environment::with_enclosing(interpreter.environment.clone());
+
         for (param, arg) in self.declaration.parameters.iter().zip(args) {
             env.define(param.lexeme.clone(), arg.clone());
         }
-        let res = interpreter
-            .execute_block_with(&self.declaration.body, env)
-            .unwrap();
-        Value::Nil.into()
+
+        let Err(event) = interpreter.execute_block_with(&self.declaration.body, env) else {
+            return Ok(Value::Nil.into());
+        };
+
+        match event {
+            RuntimeEvent::Return(obj) => Ok(obj),
+            RuntimeEvent::Error(err) => Err(err.into()),
+        }
     }
 
     fn arity(&self) -> usize {

@@ -11,6 +11,7 @@ pub trait Visitor {
     fn visit_expression_stmt(&mut self, stmt: &Expression) -> Self::Output;
     fn visit_var_stmt(&mut self, stmt: &Var) -> Self::Output;
     fn visit_function_stmt(&mut self, stmt: &Function) -> Self::Output;
+    fn visit_return_stmt(&mut self, stmt: &Return) -> Self::Output;
     fn visit_if_stmt(&mut self, stmt: &If) -> Self::Output;
     fn visit_while_stmt(&mut self, stmt: &While) -> Self::Output;
     fn visit_block_stmt(&mut self, stmt: &Block) -> Self::Output;
@@ -22,6 +23,7 @@ pub enum StmtNode {
     Expression(Expression),
     Var(Var),
     Function(Function),
+    Return(Return),
     If(If),
     While(While),
     Block(Block),
@@ -37,6 +39,7 @@ impl Stmt for StmtNode {
             StmtNode::If(if_stmt) => if_stmt.accept(visitor),
             StmtNode::While(while_stmt) => while_stmt.accept(visitor),
             StmtNode::Function(function) => function.accept(visitor),
+            StmtNode::Return(return_stmt) => return_stmt.accept(visitor),
         }
     }
 }
@@ -119,6 +122,30 @@ impl Function {
 impl From<Function> for StmtNode {
     fn from(function: Function) -> Self {
         Self::Function(function)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Return {
+    pub keyword: Token,
+    pub value: Option<ExprNode>,
+}
+
+impl Stmt for Return {
+    fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
+        visitor.visit_return_stmt(&self)
+    }
+}
+
+impl Return {
+    pub fn new(keyword: Token, value: Option<ExprNode>) -> Self {
+        Self { keyword, value }
+    }
+}
+
+impl From<Return> for StmtNode {
+    fn from(return_stmt: Return) -> Self {
+        Self::Return(return_stmt)
     }
 }
 

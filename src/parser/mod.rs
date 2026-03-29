@@ -1,4 +1,3 @@
-use std::fmt::format;
 use std::iter::Peekable;
 use std::vec;
 
@@ -7,7 +6,7 @@ use crate::error::StaticError;
 use crate::parser::expr::{
     Assign, Binary, Call, ExprNode, Grouping, Literal, Logical, Unary, Variable,
 };
-use crate::parser::stmt::{Block, Expression, Function, If, Print, StmtNode, Var, While};
+use crate::parser::stmt::{Block, Expression, Function, If, Print, Return, StmtNode, Var, While};
 use crate::scanner::token::{Token, TokenType};
 
 pub mod expr;
@@ -147,8 +146,17 @@ impl Parser {
         Ok(Function::new(name, parameters, body).into())
     }
 
-    // statement → exprStmt | forStmt | whileStmt | ifStmt | printStmt | block ;
+    /// statement      → exprStmt
+    ///                | returnStmt
+    ///                | forStmt
+    ///                | whileStmt
+    ///                | ifStmt
+    ///                | printStmt
+    ///                | block ;
     fn statement(&mut self) -> Result<StmtNode, StaticError> {
+        if let Some(keyword) = self.next_if(TokenType::Return) {
+            return self.return_statement(keyword);
+        }
         if self.next_if(TokenType::For).is_some() {
             return self.for_statement();
         }
@@ -166,6 +174,19 @@ impl Parser {
             return Ok(Block::new(stmts).into());
         }
         self.expression_statement()
+    }
+
+    /// returnStmt → "return" expression? ";" ;
+    fn return_statement(&mut self, keyword: Token) -> Result<StmtNode, StaticError> {
+        let mut value = None;
+        if !self.peek_check(TokenType::Semicolon) {
+            value = Some(self.expression()?);
+        }
+        self.next_ok(
+            TokenType::Semicolon,
+            "Expect ';' after return value.".into(),
+        )?;
+        Ok(Return::new(keyword, value).into())
     }
 
     /// forStmt → "for" "(" ( varDecl | exprStmt | ";" ) expression? ";" expression? ")" statement ;
@@ -610,11 +631,12 @@ mod tests {
         match stmt {
             StmtNode::Print(print) => format!("print {}", AstPrinter.print(&*print.expr)),
             StmtNode::Expression(expression) => AstPrinter.print(&*expression.expr),
-            StmtNode::Var(_var) => todo!(),
-            StmtNode::Block(_block) => todo!(),
-            StmtNode::If(_if) => todo!(),
+            StmtNode::Var(_) => todo!(),
+            StmtNode::Block(_) => todo!(),
+            StmtNode::If(_) => todo!(),
             StmtNode::While(_) => todo!(),
-            StmtNode::Function(function) => todo!(),
+            StmtNode::Function(_) => todo!(),
+            StmtNode::Return(_) => todo!(),
         }
     }
 

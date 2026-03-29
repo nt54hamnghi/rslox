@@ -1,15 +1,13 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::ops::Not;
 use std::rc::Rc;
 
-use crate::interpreter::callable::Callable;
 use crate::interpreter::callable::function::LoxFunction;
 use crate::interpreter::callable::native::ClockNativeFunction;
 use crate::interpreter::environment::{Environment, EnvironmentRef};
-use crate::interpreter::error::RuntimeError;
+use crate::interpreter::error::RuntimeEvent;
 use crate::parser::expr::{self, Binary, Expr, ExprNode};
-use crate::parser::stmt::{self, Function, Stmt, StmtNode};
+use crate::parser::stmt::{self, Stmt, StmtNode};
 use crate::scanner::token::{Token, TokenType};
 use crate::{Object, Value};
 
@@ -50,7 +48,7 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&mut self, program: &[StmtNode]) -> Result<(), RuntimeError> {
+    pub fn interpret(&mut self, program: &[StmtNode]) -> Result<(), RuntimeEvent> {
         for statement in program {
             self.execute(statement)?;
         }
@@ -59,21 +57,21 @@ impl Interpreter {
 
     /// Executes a single statement node.
     ///
-    /// Returns a [`RuntimeError`] if execution of the statement fails at runtime.
-    pub fn execute(&mut self, stmt: &StmtNode) -> Result<(), RuntimeError> {
+    /// Returns a [`RuntimeEvent`] if execution of the statement fails at runtime.
+    pub fn execute(&mut self, stmt: &StmtNode) -> Result<(), RuntimeEvent> {
         Stmt::accept(stmt, self)
     }
 
     /// Evaluates a single expression tree.
     ///
     /// Returns the resulting value or a runtime error when evaluation fails.
-    pub fn evaluate(&mut self, expr: &ExprNode) -> Result<Object, RuntimeError> {
+    pub fn evaluate(&mut self, expr: &ExprNode) -> Result<Object, RuntimeEvent> {
         Expr::accept(expr, self)
     }
 }
 
 impl stmt::Visitor for Interpreter {
-    type Output = Result<(), RuntimeError>;
+    type Output = Result<(), RuntimeEvent>;
 
     fn visit_print_stmt(&mut self, stmt: &stmt::Print) -> Self::Output {
         let value = self.evaluate(&stmt.expr)?;
@@ -107,6 +105,17 @@ impl stmt::Visitor for Interpreter {
             .borrow_mut()
             .define(stmt.name.lexeme.clone(), function.into());
         Ok(())
+    }
+
+    fn visit_return_stmt(&mut self, stmt: &stmt::Return) -> Self::Output {
+        let value = stmt
+            .value
+            .as_ref()
+            .map(|expr| self.evaluate(&expr))
+            .transpose()?
+            .unwrap_or(Value::Nil.into());
+
+        Err(RuntimeEvent::Return(value))
     }
 
     fn visit_if_stmt(&mut self, stmt: &stmt::If) -> Self::Output {
@@ -170,7 +179,7 @@ impl Interpreter {
     /// Each statement runs with a new environment whose enclosing parent is the
     /// environment active at the call site. The previous environment is restored
     /// automatically, even if execution returns early with an error.
-    fn execute_block(&mut self, stmts: &[StmtNode]) -> Result<(), RuntimeError> {
+    fn execute_block(&mut self, stmts: &[StmtNode]) -> Result<(), RuntimeEvent> {
         let guard = self.enter_block();
         for stmt in stmts {
             if let Err(err) = guard.interpreter.execute(stmt) {
@@ -204,7 +213,7 @@ impl Interpreter {
         &mut self,
         stmts: &[StmtNode],
         env: Environment,
-    ) -> Result<(), RuntimeError> {
+    ) -> Result<(), RuntimeEvent> {
         let guard = self.enter_block_with(env);
         for stmt in stmts {
             if let Err(err) = guard.interpreter.execute(stmt) {
@@ -216,7 +225,7 @@ impl Interpreter {
 }
 
 impl expr::Visitor for Interpreter {
-    type Output = Result<Object, RuntimeError>;
+    type Output = Result<Object, RuntimeEvent>;
 
     /// Produces the value represented by a literal expression.
     fn visit_literal_expr(&self, expr: &expr::Literal) -> Self::Output {
@@ -238,7 +247,7 @@ impl expr::Visitor for Interpreter {
             TokenType::Bang => Ok(right.is_truthy().not().into()),
             TokenType::Minus => {
                 let Object::Primitive(Value::Number(n)) = right else {
-                    return Err(RuntimeError::new(
+                    return Err(RuntimeEvent::error(
                         expr.operator.clone(),
                         "Operand must be a number.",
                     ));
@@ -271,13 +280,13 @@ impl expr::Visitor for Interpreter {
     /// Returns an error for invalid operand types or invalid numeric operations.
     fn visit_binary_expr(&mut self, expr: &Binary) -> Self::Output {
         let Object::Primitive(left) = self.evaluate(&expr.left)? else {
-            return Err(RuntimeError::new(
+            return Err(RuntimeEvent::error(
                 expr.operator.clone(),
                 "Left operand must be a primitive value.",
             ));
         };
         let Object::Primitive(right) = self.evaluate(&expr.right)? else {
-            return Err(RuntimeError::new(
+            return Err(RuntimeEvent::error(
                 expr.operator.clone(),
                 "Right operand must be a primitive value.",
             ));
@@ -299,7 +308,7 @@ impl expr::Visitor for Interpreter {
             TokenType::Slash => {
                 let (a, b) = check_number_operands(left, right, op)?;
                 if b == 0f64 {
-                    return Err(RuntimeError::new(expr.operator.clone(), "Division by 0"));
+                    return Err(RuntimeEvent::error(expr.operator.clone(), "Division by 0"));
                 }
                 Ok((a / b).into())
             }
@@ -322,7 +331,7 @@ impl expr::Visitor for Interpreter {
             TokenType::Plus => match (left, right) {
                 (Value::Number(a), Value::Number(b)) => Ok((a + b).into()),
                 (Value::String(a), Value::String(b)) => Ok(format!("{a}{b}").into()),
-                _ => Err(RuntimeError::new(
+                _ => Err(RuntimeEvent::error(
                     expr.operator.clone(),
                     "Operands must be numbers.",
                 )),
@@ -346,7 +355,7 @@ impl expr::Visitor for Interpreter {
 
     fn visit_call_expr(&mut self, expr: &expr::Call) -> Self::Output {
         let Object::Function(callee) = self.evaluate(&expr.callee)? else {
-            return Err(RuntimeError::new(
+            return Err(RuntimeEvent::error(
                 expr.paren.clone(),
                 "Can only call functions and classes.",
             ));
@@ -359,7 +368,7 @@ impl expr::Visitor for Interpreter {
             .collect::<Result<Vec<_>, _>>()?;
 
         if args.len() != callee.arity() {
-            return Err(RuntimeError::new(
+            return Err(RuntimeEvent::error(
                 expr.paren.clone(),
                 format!(
                     "Expected {} arguments but got {}.",
@@ -369,17 +378,16 @@ impl expr::Visitor for Interpreter {
             ));
         }
 
-        let res = callee.call(self, args.as_slice());
-        Ok(res)
+        callee.call(self, args.as_slice())
     }
 }
 
 /// Converts two runtime values into numeric operands for arithmetic/comparison.
 ///
 /// Returns a [`RuntimeError`] if either operand is not a number.
-fn check_number_operands(left: Value, right: Value, op: Token) -> Result<(f64, f64), RuntimeError> {
+fn check_number_operands(left: Value, right: Value, op: Token) -> Result<(f64, f64), RuntimeEvent> {
     let (Value::Number(a), Value::Number(b)) = (left, right) else {
-        return Err(RuntimeError::new(op, "Operands must be numbers."));
+        return Err(RuntimeEvent::error(op, "Operands must be numbers."));
     };
     Ok((a, b))
 }
@@ -399,7 +407,7 @@ mod tests {
         assert_eq!(expected, actual);
     }
 
-    fn eval_expr(input: &str) -> Result<Object, RuntimeError> {
+    fn eval_expr(input: &str) -> Result<Object, RuntimeEvent> {
         let tokens = Scanner::new(input)
             .scan_tokens()
             .filter_map(|r| match r {
@@ -417,7 +425,7 @@ mod tests {
         interpreter.evaluate(&expr)
     }
 
-    fn interpret_program(input: &str) -> Result<(), RuntimeError> {
+    fn interpret_program(input: &str) -> Result<(), RuntimeEvent> {
         let tokens = Scanner::new(input)
             .scan_tokens()
             .filter_map(|r| match r {

@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::interpreter::error::RuntimeError;
+use crate::interpreter::error::RuntimeEvent;
 use crate::scanner::token::{Token, TokenType};
 
 #[derive(Debug, thiserror::Error)]
@@ -56,7 +56,7 @@ impl Display for StaticError {
 #[derive(Debug, thiserror::Error)]
 pub enum Report {
     #[error(transparent)]
-    Runtime(#[from] RuntimeError),
+    Runtime(#[from] RuntimeEvent),
 
     #[error(transparent)]
     Static(#[from] StaticError),

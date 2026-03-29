@@ -4,18 +4,23 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::Object;
 use crate::interpreter::Interpreter;
 use crate::interpreter::callable::Callable;
+use crate::interpreter::error::RuntimeEvent;
 
 #[derive(Debug)]
 pub struct ClockNativeFunction;
 
 impl Callable for ClockNativeFunction {
-    fn call(&self, _interpreter: &mut Interpreter, _args: &[Object]) -> Object {
+    fn call(
+        &self,
+        _interpreter: &mut Interpreter,
+        _args: &[Object],
+    ) -> Result<Object, RuntimeEvent> {
         let time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs() as f64;
 
-        time.into()
+        Ok(time.into())
     }
 
     fn arity(&self) -> usize {

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::Object;
-use crate::interpreter::error::RuntimeError;
+use crate::interpreter::error::RuntimeEvent;
 use crate::scanner::token::Token;
 
 pub(super) type EnvironmentRef = Rc<RefCell<Environment>>;
@@ -39,7 +39,7 @@ impl Environment {
     /// Retrieves the value of a variable from the environment.
     ///
     /// Returns a [`RuntimeError`] if the variable is not defined.
-    pub(super) fn get(&self, token: &Token) -> Result<Object, RuntimeError> {
+    pub(super) fn get(&self, token: &Token) -> Result<Object, RuntimeEvent> {
         let var_name = &token.lexeme;
 
         if let Some(value) = self.values.get(var_name).cloned() {
@@ -51,10 +51,10 @@ impl Environment {
         }
 
         let msg = format!("Undefined variable '{}'.", var_name);
-        Err(RuntimeError::new(token.clone(), msg))
+        Err(RuntimeEvent::error(token.clone(), msg))
     }
 
-    pub(super) fn assign(&mut self, token: &Token, value: Object) -> Result<(), RuntimeError> {
+    pub(super) fn assign(&mut self, token: &Token, value: Object) -> Result<(), RuntimeEvent> {
         let var_name = &token.lexeme;
 
         if self.values.contains_key(var_name) {
@@ -67,7 +67,7 @@ impl Environment {
         }
 
         let msg = format!("Undefined variable '{}'.", var_name);
-        Err(RuntimeError::new(token.clone(), msg))
+        Err(RuntimeEvent::error(token.clone(), msg))
     }
 }
 
