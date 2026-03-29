@@ -935,6 +935,67 @@ fn test_functions_without_arguments_success(#[case] source: &str, #[case] expect
 #[rstest]
 #[case(
     r#"
+    // This is a simple function that takes one
+    // argument and prints it
+    fun f1(a) { print a; }
+    f1(52);
+    "#,
+    "52\n"
+)]
+#[case(
+    r#"
+    // This function takes three arguments and prints
+    // their sum
+    fun f3(a, b, c) { print a + b + c; }
+    f3(49, 49, 49);
+    "#,
+    "147\n"
+)]
+#[case(
+    r#"
+    // This function takes eight arguments and prints
+    // their sum
+    fun f8(a, b, c, d, e, f, g, h) {
+      print a - b + c * d + e - f + g - h;
+    }
+    f8(58, 58, 58, 58, 58, 58, 58, 58);
+    "#,
+    "3364\n"
+)]
+#[case(
+    r#"
+    // This function takes two arguments and prints
+    // the grade based on the score and bonus
+    fun calculateGrade(score, bonus) {
+      var finalScore = score + bonus;
+
+      if (finalScore >= 90) {
+        print "A";
+      } else if (finalScore >= 80) {
+        print "B";
+      } else if (finalScore >= 70) {
+        print "C";
+      } else if (finalScore >= 60) {
+        print "D";
+      } else {
+        print "F";
+      }
+    }
+
+    var score = 86;
+    var bonus = 5;
+    print "Grade for given score is: ";
+    calculateGrade(score, bonus);
+    "#,
+    "Grade for given score is: \nA\n"
+)]
+fn test_functions_with_arguments_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
     // This program uses a for loop to print the
     // numbers from 0 to 3
     // The assignment operation returns the assigned
