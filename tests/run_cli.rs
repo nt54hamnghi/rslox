@@ -1054,6 +1054,114 @@ fn test_return_statements_success(#[case] source: &str, #[case] expected_stdout:
 #[rstest]
 #[case(
     r#"
+    // This program creates a function that returns
+    // another function
+    // and uses it to greet two different people with
+    // two different greetings
+    fun makeGreeter() {
+      fun greet(name) {
+        print "Hello " + name;
+      }
+      return greet;
+    }
+
+    var sayHello = makeGreeter();
+
+    sayHello("Bob");
+    sayHello("Alice");
+    sayHello("Eve");
+    "#,
+    "Hello Bob\nHello Alice\nHello Eve\n"
+)]
+#[case(
+    r#"
+    // This program defines a function that takes in a
+    // function and an argument
+    // and returns the result of calling the function
+    // with the argument
+    fun returnArg(arg) {
+      return arg;
+    }
+
+    fun returnFunCallWithArg(func, arg) {
+      return returnArg(func)(arg);
+    }
+
+    fun printArg(arg) {
+      print arg;
+    }
+
+    returnFunCallWithArg(printArg, "baz");
+    "#,
+    "baz\n"
+)]
+#[case(
+    r#"
+    fun square(x) {
+      return x * x;
+    }
+
+    // This higher-order function applies a
+    // function N times to a starting value x.
+    fun applyTimesN(N, f, x) {
+      var i = 0;
+      while (i < N) {
+        x = f(x);
+        i = i + 1;
+      }
+      return x;
+    }
+
+    // 3 is squared once
+    print applyTimesN(1, square, 3);
+    // 3 is squared twice
+    print applyTimesN(2, square, 3);
+    // 3 is squared thrice
+    print applyTimesN(3, square, 3);
+    "#,
+    "9\n81\n6561\n"
+)]
+#[case(
+    r#"
+    // This program creates a function that returns
+    // another function
+    // and uses it to filter a list of numbers
+    fun makeFilter() {
+      fun filter(n) {
+        if (n < 70) {
+          return false;
+        }
+        return true;
+      }
+      return filter;
+    }
+
+    // This function applies a function to a list of
+    // numbers
+    fun applyToNumbers(f, count) {
+      var n = 0;
+      while (n < count) {
+        if (f(n)) {
+          print n;
+        }
+        n = n + 1;
+      }
+    }
+
+    var greaterThanX = makeFilter();
+
+    print "Numbers >= 70:";
+    applyToNumbers(greaterThanX, 70 + 3);
+    "#,
+    "Numbers >= 70:\n70\n71\n72\n"
+)]
+fn test_higher_order_functions_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
     // This program is missing the closing parenthesis
     // for the function call
     // Hence the compiler error
