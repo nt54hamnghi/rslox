@@ -1162,6 +1162,195 @@ fn test_higher_order_functions_success(#[case] source: &str, #[case] expected_st
 #[rstest]
 #[case(
     r#"
+    // This program tries to execute an integer as a
+    // function
+    24();
+    "#,
+    "Can only call functions and classes.",
+    "[line 4]"
+)]
+#[case(
+    r#"
+    // This program tries to call a function with too
+    // many arguments
+    fun f(a, b) {
+      print a;
+      print b;
+    }
+
+    f(1, 2, 3, 4);
+    // expect runtime error: Expected 2 arguments
+    "#,
+    "Expected 2 arguments but got 4.",
+    "[line 9]"
+)]
+#[case(
+    r#"
+    // This program tries to call a function with too
+    // few arguments
+    fun f(a, b) {}
+
+    // expect runtime error: Expected 2 arguments
+    f(1);
+    "#,
+    "Expected 2 arguments but got 1.",
+    "[line 7]"
+)]
+#[case(
+    r#"
+    // This program tries to execute a boolean as a
+    // function
+    (true == true)();
+    "#,
+    "Can only call functions and classes.",
+    "[line 4]"
+)]
+fn test_function_runtime_errors_report_output_and_exit_70(
+    #[case] source: &str,
+    #[case] expected_message: &str,
+    #[case] expected_line: &str,
+) {
+    let output = run_source(source);
+
+    assert_eq!(Some(70), output.status.code());
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    let combined = format!("{stdout}{stderr}");
+    assert!(combined.contains(expected_message));
+    assert!(combined.contains(expected_line));
+}
+
+#[rstest]
+#[case(
+    r#"
+    // This program demonstrates global and local
+    // variable shadowing in Lox.
+    var a = 62;
+
+    fun printAndModify() {
+      print a;
+      var a = 70;
+      print a;
+    }
+
+    print a;
+    a = 75;
+    printAndModify();
+    "#,
+    "62\n75\n70\n"
+)]
+#[case(
+    r#"
+    // This program uses a while loop to count down
+    // from 5 to 1, printing each
+    // number
+    // and then decrementing the count until it
+    // reaches 0, at which point it prints
+    // "Blast off!"
+    var count = 5;
+
+    fun tick() {
+      if (count > 0) {
+        print count;
+        count = count - 1;
+        return false;
+      }
+      print "Blast off!";
+      return true;
+    }
+
+    while (!tick()) {}
+    "#,
+    "5\n4\n3\n2\n1\nBlast off!\n"
+)]
+#[case(
+    r#"
+    // This program demonstrates variable shadowing in
+    // Lox with functions.
+    // The first counter is a global variable that is
+    // modified by the inner block.
+    // The second counter is a local variable that
+    // shadows the global variable.
+    var counter = 73;
+
+    fun incrementCounter(amount) {
+      counter = counter + amount;
+      print counter;
+    }
+
+    {
+      counter = 45;
+      incrementCounter(2);
+      print counter;
+    }
+    print counter;
+    "#,
+    "47\n47\n47\n"
+)]
+#[case(
+    r#"
+    // This program tests variable scoping and
+    // shadowing in Lox. It demonstrates:
+    // Global variable declarations
+    // Function scope access to global variables
+    // Block scoping with local variables shadowing
+    // outer variables
+    // Verification that global variables remain
+    // unchanged after shadowing
+    var x = 1;
+    var y = 2;
+
+    fun printBoth() {
+      if (x < y) {
+        print "x is less than y:";
+        print x;
+        print y;
+      } else {
+        print "x is not less than y:";
+        print x;
+        print y;
+      }
+    }
+
+    {
+      var x = 10;
+      {
+        var y = 20;
+
+        var i = 0;
+        while (i < 3) {
+          x = x + 1;
+          y = y - 1;
+          print "Local x: ";
+          print x;
+          print "Local y: ";
+          print y;
+          i = i + 1;
+        }
+
+        if (x > y) {
+          print "Local x > y";
+        }
+
+        printBoth();
+      }
+    }
+
+    if (x == 1 and y == 2) {
+      print "Globals unchanged:";
+      printBoth();
+    }
+    "#,
+    "Local x: \n11\nLocal y: \n19\nLocal x: \n12\nLocal y: \n18\nLocal x: \n13\nLocal y: \n17\nx is less than y:\n1\n2\nGlobals unchanged:\nx is less than y:\n1\n2\n"
+)]
+fn test_function_scope_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
     // This program is missing the closing parenthesis
     // for the function call
     // Hence the compiler error
