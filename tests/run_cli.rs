@@ -1162,6 +1162,145 @@ fn test_higher_order_functions_success(#[case] source: &str, #[case] expected_st
 #[rstest]
 #[case(
     r#"
+    // This program demonstrates the use of closures
+    // to create a counter function.
+    // The inner function count() needs access to the
+    // outer function's local variable i.
+    // This can be achieved using closures.
+    fun makeCounter() {
+      var i = 0;
+      fun count() {
+        i = i + 6;
+        print i;
+      }
+
+      return count;
+    }
+
+    var counter = makeCounter();
+    counter();
+    counter();
+    "#,
+    "6\n12\n"
+)]
+#[case(
+    r#"
+    // This program uses mutual recursion to determine
+    // if a number is even or odd.
+    // It also uses a shared threshold variable that
+    // is used to determine if a number is too large
+    //to be processed.
+    {
+      var threshold = 50;
+
+      fun isEven(n) {
+        if (n == 0) return true;
+        if (n > threshold) return false;
+        return isOdd(n - 1);
+      }
+
+      fun isOdd(n) {
+        if (n == 0) return false;
+        if (n > threshold) return false;
+        return isEven(n - 1);
+      }
+
+      print isEven(75);
+    }
+    "#,
+    "false\n"
+)]
+#[case(
+    r#"
+    // This program demonstrates the use of closures
+    // to create a logger function.
+    // The inner function log() has access to the
+    // outer function's local variable logCount.
+    // This is an example of how closures can be used
+    // to create private variables and methods.
+    fun makeLogger(prefix) {
+      var logCount = 0;
+
+      fun log(message) {
+        logCount = logCount + 1;
+        print prefix + ": " + message;
+
+        if (logCount > 3) {
+          print prefix + ": Too many log lines!";
+          logCount = 0;
+        }
+      }
+
+      return log;
+    }
+
+    var debugLog = makeLogger("foo");
+    var errorLog = makeLogger("hello");
+
+    debugLog("Starting");
+    debugLog("Processing");
+    debugLog("Finishing");
+    debugLog("Extra line");
+
+    errorLog("Failed!");
+    errorLog("Retrying...");
+    "#,
+    "foo: Starting\nfoo: Processing\nfoo: Finishing\nfoo: Extra line\nfoo: Too many log lines!\nhello: Failed!\nhello: Retrying...\n"
+)]
+#[case(
+    r#"
+    // This program demonstrates the use of closures
+    // to create an accumulator function.
+    // The inner function accumulate() has access to
+    // the outer function's local variables sum and
+    // count.
+    // This is an example of how closures can be used
+    // to create private variables and methods.
+    fun makeAccumulator(label) {
+      var sum = 0;
+      var count = 0;
+
+      fun accumulate(value) {
+        sum = sum + value;
+        count = count + 1;
+
+        print label;
+        print count;
+        print sum;
+        print sum;
+
+        if (count > 3) {
+          print "reset";
+          sum = 0;
+          count = 0;
+        }
+
+        return sum;
+      }
+
+      return accumulate;
+    }
+
+    var acc1 = makeAccumulator("First:");
+    var acc2 = makeAccumulator("Second:");
+
+    acc1(4);
+    acc1(5);
+    acc1(6);
+    acc1(2);
+
+    acc2(5);
+    acc2(2);
+    "#,
+    "First:\n1\n4\n4\nFirst:\n2\n9\n9\nFirst:\n3\n15\n15\nFirst:\n4\n17\n17\nreset\nSecond:\n1\n5\n5\nSecond:\n2\n7\n7\n"
+)]
+fn test_closures_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
     // This program tries to execute an integer as a
     // function
     24();
