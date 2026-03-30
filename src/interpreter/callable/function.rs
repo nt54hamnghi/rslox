@@ -3,24 +3,28 @@ use std::rc::Rc;
 
 use crate::interpreter::callable::Callable;
 use crate::interpreter::error::RuntimeEvent;
-use crate::interpreter::{Environment, Interpreter};
+use crate::interpreter::{Environment, EnvironmentRef, Interpreter};
 use crate::parser::stmt::Function;
 use crate::{Object, Value};
 
 #[derive(Debug)]
-pub struct LoxFunction {
+pub(crate) struct LoxFunction {
     declaration: Function,
+    closure: EnvironmentRef,
 }
 
 impl LoxFunction {
-    pub fn new(declaration: Function) -> Self {
-        Self { declaration }
+    pub fn new(declaration: Function, closure: EnvironmentRef) -> Self {
+        Self {
+            declaration,
+            closure,
+        }
     }
 }
 
 impl Callable for LoxFunction {
     fn call(&self, interpreter: &mut Interpreter, args: &[Object]) -> Result<Object, RuntimeEvent> {
-        let mut env = Environment::with_enclosing(interpreter.environment.clone());
+        let mut env = Environment::with_enclosing(self.closure.clone());
 
         for (param, arg) in self.declaration.parameters.iter().zip(args) {
             env.define(param.lexeme.clone(), arg.clone());

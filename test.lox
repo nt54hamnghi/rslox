@@ -1,33 +1,13 @@
-// var start = clock();
-// for (var i = 0; i < 1000000; i = i + 1) {
-//     print i;
-// }
-// var elapsed = clock() - start;
-// print "Took: ";
-// print elapsed;
-
-// var msg = "hello";
-// print msg + " world";
-// {
-//     var msg = "hi";
-//     print msg + " world";
-//     msg = "ola";
-// }
-// print msg + " world";
-
-// fun add(a, b) {
-//     print a + b;
-// }
-//
-// add(1, 2);
-// print add;
-// print clock;
-
-fun fib(n) {
-  if (n <= 1) return n;
-  return fib(n - 2) + fib(n - 1);
+fun makeCounter() {
+    var i = 0;
+    fun count() {
+        i = i + 1;
+        print i;
+    }
+    
+    return count;
 }
 
-for (var i = 0; i < 20; i = i + 1) {
-  print fib(i);
-}
+var counter = makeCounter();
+counter(); // "1".
+counter(); // "2".

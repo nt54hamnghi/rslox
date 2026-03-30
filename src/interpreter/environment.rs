@@ -6,17 +6,17 @@ use crate::Object;
 use crate::interpreter::error::RuntimeEvent;
 use crate::scanner::token::Token;
 
-pub(super) type EnvironmentRef = Rc<RefCell<Environment>>;
+pub(crate) type EnvironmentRef = Rc<RefCell<Environment>>;
 
 #[derive(Debug, Default)]
-pub(super) struct Environment {
-    pub(super) values: HashMap<String, Object>,
-    pub(super) enclosing: Option<EnvironmentRef>,
+pub(crate) struct Environment {
+    pub(crate) values: HashMap<String, Object>,
+    pub(crate) enclosing: Option<EnvironmentRef>,
 }
 
 impl Environment {
     /// Creates a new global [`Environment`] with no enclosing scope.
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             values: HashMap::new(),
             enclosing: None,
@@ -24,7 +24,7 @@ impl Environment {
     }
 
     /// Creates a new [`Environment`] with the given [`Environment`] as its enclosing scope.
-    pub(super) fn with_enclosing(env: EnvironmentRef) -> Self {
+    pub(crate) fn with_enclosing(env: EnvironmentRef) -> Self {
         Self {
             values: HashMap::new(),
             enclosing: Some(env),
@@ -32,14 +32,14 @@ impl Environment {
     }
 
     /// Defines a new variable in the environment by inserting the key-value pair.
-    pub(super) fn define(&mut self, key: String, value: Object) {
+    pub(crate) fn define(&mut self, key: String, value: Object) {
         self.values.insert(key, value);
     }
 
     /// Retrieves the value of a variable from the environment.
     ///
     /// Returns a [`RuntimeError`] if the variable is not defined.
-    pub(super) fn get(&self, token: &Token) -> Result<Object, RuntimeEvent> {
+    pub(crate) fn get(&self, token: &Token) -> Result<Object, RuntimeEvent> {
         let var_name = &token.lexeme;
 
         if let Some(value) = self.values.get(var_name).cloned() {
@@ -54,7 +54,7 @@ impl Environment {
         Err(RuntimeEvent::error(token.clone(), msg))
     }
 
-    pub(super) fn assign(&mut self, token: &Token, value: Object) -> Result<(), RuntimeEvent> {
+    pub(crate) fn assign(&mut self, token: &Token, value: Object) -> Result<(), RuntimeEvent> {
         let var_name = &token.lexeme;
 
         if self.values.contains_key(var_name) {
@@ -70,11 +70,3 @@ impl Environment {
         Err(RuntimeEvent::error(token.clone(), msg))
     }
 }
-
-// /// Creates a new [`Environment`] with the given [`Environment`] as its enclosing scope.
-// pub(super) fn with_enclosing(env: EnvironmentRef) -> Self {
-//     Self {
-//         values: HashMap::new(),
-//         enclosing: Some(env),
-//     }
-// }
