@@ -3,12 +3,12 @@ use std::vec;
 
 use crate::Value;
 use crate::error::StaticError;
-use crate::parser::expr::{
-    Assign, Binary, Call, ExprNode, Grouping, Literal, Logical, Unary, Variable,
-};
+use crate::parser::ast::Context;
+use crate::parser::expr::{ExprNode, Variable};
 use crate::parser::stmt::{Block, Expression, Function, If, Print, Return, StmtNode, Var, While};
 use crate::scanner::token::{Token, TokenType};
 
+pub mod ast;
 pub mod expr;
 pub mod printer;
 pub mod stmt;
@@ -17,12 +17,14 @@ pub const MAX_PARAMETER_COUNT: usize = 255;
 pub const MAX_ARGUMENT_COUNT: usize = MAX_PARAMETER_COUNT;
 
 pub struct Parser {
+    ctx: &'static Context,
     tokens: Peekable<vec::IntoIter<Token>>,
 }
 
 impl From<Vec<Token>> for Parser {
     fn from(value: Vec<Token>) -> Self {
         Self {
+            ctx: Box::leak(Box::new(Context::new())),
             tokens: value.into_iter().peekable(),
         }
     }
@@ -204,7 +206,7 @@ impl Parser {
 
         // parse condition
         // cond is true by default, and is set if there's a condition expression
-        let mut cond = ExprNode::Literal(Value::from(true).into());
+        let mut cond = self.ctx.new_literal(Value::from(true));
         if self.next_if(TokenType::Semicolon).is_none() {
             cond = self.expression()?;
             self.next_ok(
@@ -309,15 +311,14 @@ impl Parser {
         if let Some(equals) = self.next_if(TokenType::Equal) {
             let value = self.assignment()?;
 
-            let ExprNode::Variable(variable) = &expr else {
+            let Some(variable) = expr.get::<Variable>() else {
                 return Err(StaticError::error_at_token(
                     &equals,
                     "Invalid assignment target.".into(),
                 ));
             };
 
-            let name = variable.name.clone();
-            expr = Assign::new(name, value).into();
+            expr = self.ctx.new_assign(variable.name, value);
         }
 
         Ok(expr)
@@ -329,7 +330,7 @@ impl Parser {
 
         while let Some(operator) = self.next_match(&[TokenType::Or]) {
             let right = self.logic_and()?;
-            expr = Logical::new(expr, operator, right).into();
+            expr = self.ctx.new_logical(expr, operator, right);
         }
 
         Ok(expr)
@@ -341,7 +342,7 @@ impl Parser {
 
         while let Some(operator) = self.next_match(&[TokenType::And]) {
             let right = self.equality()?;
-            expr = Logical::new(expr, operator, right).into();
+            expr = self.ctx.new_logical(expr, operator, right);
         }
 
         Ok(expr)
@@ -353,7 +354,7 @@ impl Parser {
 
         while let Some(operator) = self.next_match(&[TokenType::BangEqual, TokenType::EqualEqual]) {
             let right = self.comparison()?;
-            expr = Binary::new(expr, operator, right).into();
+            expr = self.ctx.new_binary(expr, operator, right);
         }
 
         Ok(expr)
@@ -370,7 +371,7 @@ impl Parser {
             TokenType::LessEqual,
         ]) {
             let right = self.term()?;
-            expr = Binary::new(expr, operator, right).into();
+            expr = self.ctx.new_binary(expr, operator, right);
         }
 
         Ok(expr)
@@ -382,7 +383,7 @@ impl Parser {
 
         while let Some(operator) = self.next_match(&[TokenType::Minus, TokenType::Plus]) {
             let right = self.factor()?;
-            expr = Binary::new(expr, operator, right).into();
+            expr = self.ctx.new_binary(expr, operator, right);
         }
 
         Ok(expr)
@@ -394,7 +395,7 @@ impl Parser {
 
         while let Some(operator) = self.next_match(&[TokenType::Slash, TokenType::Star]) {
             let right = self.unary()?;
-            expr = Binary::new(expr, operator, right).into();
+            expr = self.ctx.new_binary(expr, operator, right);
         }
 
         Ok(expr)
@@ -404,7 +405,7 @@ impl Parser {
     fn unary(&mut self) -> Result<ExprNode, StaticError> {
         if let Some(operator) = self.next_match(&[TokenType::Bang, TokenType::Minus]) {
             let right = self.unary()?;
-            return Ok(Unary::new(operator, right).into());
+            return Ok(self.ctx.new_unary(operator, right));
         }
 
         self.call()
@@ -440,39 +441,39 @@ impl Parser {
         }
         let paren = self.next_ok(TokenType::RightParen, "Expect ')' after arguments.".into())?;
 
-        Ok(Call::new(callee, paren, args).into())
+        Ok(self.ctx.new_call(callee, paren, args))
     }
 
     /// primary → NUMBER | STRING | "true" | "false" | "nil"| "(" expression ")" ;
     fn primary(&mut self) -> Result<ExprNode, StaticError> {
         if self.next_if(TokenType::True).is_some() {
             let val = Value::from(true);
-            return Ok(Literal::from(val).into());
+            return Ok(self.ctx.new_literal(val));
         }
 
         if self.next_if(TokenType::False).is_some() {
             let val = Value::from(false);
-            return Ok(Literal::from(val).into());
+            return Ok(self.ctx.new_literal(val));
         }
 
         if self.next_if(TokenType::Nil).is_some() {
             let val = Value::Nil;
-            return Ok(Literal::from(val).into());
+            return Ok(self.ctx.new_literal(val));
         }
 
         if let Some(token) = self.next_match(&[TokenType::Number, TokenType::String]) {
             let value = token.literal.expect("literal value for token");
-            return Ok(Literal::from(value).into());
+            return Ok(self.ctx.new_literal(value));
         }
 
         if self.next_if(TokenType::LeftParen).is_some() {
             let expr = self.expression()?;
             self.next_ok(TokenType::RightParen, "Expect ')' after expression".into())?;
-            return Ok(Grouping::new(expr).into());
+            return Ok(self.ctx.new_grouping(expr));
         }
 
         if let Some(name) = self.next_if(TokenType::Identifier) {
-            return Ok(Variable::new(name).into());
+            return Ok(self.ctx.new_variable(name));
         }
 
         Err(self.error("Expect expression".into()))

@@ -1,4 +1,5 @@
 use crate::Value;
+use crate::parser::ast::{Context, NodeId};
 use crate::scanner::token::Token;
 
 pub trait Expr {
@@ -17,36 +18,169 @@ pub trait Visitor {
     fn visit_binary_expr(&mut self, expr: &Binary) -> Self::Output;
 }
 
-#[derive(Debug, Clone)]
-pub enum ExprNode {
-    Grouping(Grouping),
-    Call(Call),
-    Binary(Binary),
-    Logical(Logical),
-    Unary(Unary),
-    Variable(Variable),
-    Assign(Assign),
-    Literal(Literal),
-}
+impl Context {
+    pub(super) fn new_grouping(&'static self, expression: ExprNode) -> ExprNode {
+        let node = Grouping { expression };
+        let id = self.nodes.borrow_mut().insert(Box::new(node));
+        ExprNode {
+            ctx: self,
+            id,
+            kind: ExprKind::Grouping,
+        }
+    }
 
-impl Expr for ExprNode {
-    fn accept<V: Visitor>(&self, v: &mut V) -> V::Output {
-        match self {
-            ExprNode::Grouping(grouping) => grouping.accept(v),
-            ExprNode::Binary(binary) => binary.accept(v),
-            ExprNode::Unary(unary) => unary.accept(v),
-            ExprNode::Literal(literal) => literal.accept(v),
-            ExprNode::Variable(variable) => variable.accept(v),
-            ExprNode::Assign(assign) => assign.accept(v),
-            ExprNode::Logical(logical) => logical.accept(v),
-            ExprNode::Call(call) => call.accept(v),
+    pub(super) fn new_call(
+        &'static self,
+        callee: ExprNode,
+        paren: Token,
+        arguments: Vec<ExprNode>,
+    ) -> ExprNode {
+        let node = Call {
+            callee,
+            paren,
+            arguments,
+        };
+        let id = self.nodes.borrow_mut().insert(Box::new(node));
+        ExprNode {
+            ctx: self,
+            id,
+            kind: ExprKind::Call,
+        }
+    }
+
+    pub(super) fn new_binary(
+        &'static self,
+        left: ExprNode,
+        operator: Token,
+        right: ExprNode,
+    ) -> ExprNode {
+        let node = Binary {
+            left,
+            operator,
+            right,
+        };
+        let id = self.nodes.borrow_mut().insert(Box::new(node));
+        ExprNode {
+            ctx: self,
+            id,
+            kind: ExprKind::Binary,
+        }
+    }
+
+    pub(super) fn new_logical(
+        &'static self,
+        left: ExprNode,
+        operator: Token,
+        right: ExprNode,
+    ) -> ExprNode {
+        let node = Logical {
+            left,
+            operator,
+            right,
+        };
+        let id = self.nodes.borrow_mut().insert(Box::new(node));
+        ExprNode {
+            ctx: self,
+            id,
+            kind: ExprKind::Logical,
+        }
+    }
+
+    pub(super) fn new_unary(&'static self, operator: Token, right: ExprNode) -> ExprNode {
+        let node = Unary { operator, right };
+        let id = self.nodes.borrow_mut().insert(Box::new(node));
+        ExprNode {
+            ctx: self,
+            id,
+            kind: ExprKind::Unary,
+        }
+    }
+
+    pub(super) fn new_variable(&'static self, name: Token) -> ExprNode {
+        let node = Variable { name };
+        let id = self.nodes.borrow_mut().insert(Box::new(node));
+        ExprNode {
+            ctx: self,
+            id,
+            kind: ExprKind::Variable,
+        }
+    }
+
+    pub(super) fn new_assign(&'static self, name: Token, value: ExprNode) -> ExprNode {
+        let node = Assign { name, value };
+        let id = self.nodes.borrow_mut().insert(Box::new(node));
+        ExprNode {
+            ctx: self,
+            id,
+            kind: ExprKind::Assign,
+        }
+    }
+
+    pub(super) fn new_literal(&'static self, value: Value) -> ExprNode {
+        let node = Literal { value };
+        let id = self.nodes.borrow_mut().insert(Box::new(node));
+        ExprNode {
+            ctx: self,
+            id,
+            kind: ExprKind::Literal,
         }
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct ExprNode {
+    ctx: &'static Context,
+    id: NodeId,
+    kind: ExprKind,
+}
+
+impl ExprNode {
+    /// Returns a cloned copy of this node's value, or `None` if the node
+    /// does not exist or is not of type `T`.
+    pub(super) fn get<T: 'static + Clone>(&self) -> Option<T> {
+        let nodes = self.ctx.nodes.borrow();
+        let value = nodes.get(self.id)?.downcast_ref::<T>().cloned();
+        value
+    }
+}
+
+impl Expr for ExprNode {
+    fn accept<V: Visitor>(&self, v: &mut V) -> V::Output {
+        let nodes = self.ctx.nodes.borrow();
+        // access the node using the node id
+        // this is safe if node ids are never invalidated
+        // FIXME: consider using .get instead
+        let node = nodes[self.id].as_ref();
+
+        match &self.kind {
+            // unwrap is safe here because we know the kind
+            ExprKind::Grouping => node.downcast_ref::<Grouping>().unwrap().accept(v),
+            ExprKind::Binary => node.downcast_ref::<Binary>().unwrap().accept(v),
+            ExprKind::Unary => node.downcast_ref::<Unary>().unwrap().accept(v),
+            ExprKind::Literal => node.downcast_ref::<Literal>().unwrap().accept(v),
+            ExprKind::Variable => node.downcast_ref::<Variable>().unwrap().accept(v),
+            ExprKind::Assign => node.downcast_ref::<Assign>().unwrap().accept(v),
+            ExprKind::Logical => node.downcast_ref::<Logical>().unwrap().accept(v),
+            ExprKind::Call => node.downcast_ref::<Call>().unwrap().accept(v),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ExprKind {
+    Grouping,
+    Call,
+    Binary,
+    Logical,
+    Unary,
+    Variable,
+    Assign,
+    Literal,
+}
+
 #[derive(Debug, Clone)]
 pub struct Grouping {
-    pub expression: Box<ExprNode>,
+    pub expression: ExprNode,
 }
 
 impl Expr for Grouping {
@@ -55,25 +189,11 @@ impl Expr for Grouping {
     }
 }
 
-impl Grouping {
-    pub fn new(expression: ExprNode) -> Self {
-        Self {
-            expression: Box::new(expression),
-        }
-    }
-}
-
-impl From<Grouping> for ExprNode {
-    fn from(grouping: Grouping) -> Self {
-        Self::Grouping(grouping)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Call {
-    pub callee: Box<ExprNode>,
+    pub callee: ExprNode,
     pub paren: Token,
-    pub arguments: Vec<Box<ExprNode>>,
+    pub arguments: Vec<ExprNode>,
 }
 
 impl Expr for Call {
@@ -82,27 +202,11 @@ impl Expr for Call {
     }
 }
 
-impl Call {
-    pub fn new(callee: ExprNode, paren: Token, arguments: Vec<ExprNode>) -> Self {
-        Self {
-            callee: Box::new(callee),
-            paren,
-            arguments: arguments.into_iter().map(Box::new).collect(),
-        }
-    }
-}
-
-impl From<Call> for ExprNode {
-    fn from(call: Call) -> Self {
-        Self::Call(call)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Binary {
-    pub left: Box<ExprNode>,
+    pub left: ExprNode,
     pub operator: Token,
-    pub right: Box<ExprNode>,
+    pub right: ExprNode,
 }
 
 impl Expr for Binary {
@@ -111,26 +215,10 @@ impl Expr for Binary {
     }
 }
 
-impl Binary {
-    pub fn new(left: ExprNode, operator: Token, right: ExprNode) -> Self {
-        Self {
-            left: Box::new(left),
-            operator,
-            right: Box::new(right),
-        }
-    }
-}
-
-impl From<Binary> for ExprNode {
-    fn from(binary: Binary) -> Self {
-        Self::Binary(binary)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Unary {
     pub operator: Token,
-    pub right: Box<ExprNode>,
+    pub right: ExprNode,
 }
 
 impl Expr for Unary {
@@ -141,45 +229,14 @@ impl Expr for Unary {
 
 #[derive(Debug, Clone)]
 pub struct Logical {
-    pub left: Box<ExprNode>,
+    pub left: ExprNode,
     pub operator: Token,
-    pub right: Box<ExprNode>,
+    pub right: ExprNode,
 }
 
 impl Expr for Logical {
     fn accept<V: Visitor>(&self, v: &mut V) -> V::Output {
         v.visit_logical_expr(self)
-    }
-}
-
-impl Logical {
-    pub fn new(left: ExprNode, operator: Token, right: ExprNode) -> Self {
-        Self {
-            left: Box::new(left),
-            operator,
-            right: Box::new(right),
-        }
-    }
-}
-
-impl From<Logical> for ExprNode {
-    fn from(logical: Logical) -> Self {
-        Self::Logical(logical)
-    }
-}
-
-impl Unary {
-    pub fn new(operator: Token, right: ExprNode) -> Self {
-        Self {
-            operator,
-            right: Box::new(right),
-        }
-    }
-}
-
-impl From<Unary> for ExprNode {
-    fn from(unary: Unary) -> Self {
-        Self::Unary(unary)
     }
 }
 
@@ -194,42 +251,15 @@ impl Expr for Variable {
     }
 }
 
-impl Variable {
-    pub fn new(name: Token) -> Self {
-        Self { name }
-    }
-}
-
-impl From<Variable> for ExprNode {
-    fn from(variable: Variable) -> Self {
-        Self::Variable(variable)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Assign {
     pub name: Token,
-    pub value: Box<ExprNode>,
+    pub value: ExprNode,
 }
 
 impl Expr for Assign {
     fn accept<V: Visitor>(&self, v: &mut V) -> V::Output {
         v.visit_assign_expr(self)
-    }
-}
-
-impl Assign {
-    pub fn new(name: Token, value: ExprNode) -> Self {
-        Self {
-            name,
-            value: Box::new(value),
-        }
-    }
-}
-
-impl From<Assign> for ExprNode {
-    fn from(assign: Assign) -> Self {
-        Self::Assign(assign)
     }
 }
 
@@ -241,12 +271,6 @@ pub struct Literal {
 impl Expr for Literal {
     fn accept<V: Visitor>(&self, v: &mut V) -> V::Output {
         v.visit_literal_expr(self)
-    }
-}
-
-impl From<Literal> for ExprNode {
-    fn from(value: Literal) -> Self {
-        Self::Literal(value)
     }
 }
 

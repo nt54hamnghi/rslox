@@ -1,6 +1,4 @@
-use crate::Value;
 use crate::parser::expr::{Binary, Expr, Grouping, Literal, Unary, Visitor};
-use crate::scanner::token::{Token, TokenType};
 
 #[derive(Clone, Copy)]
 pub struct AstPrinter;
@@ -64,17 +62,4 @@ impl Visitor for AstPrinter {
     fn visit_call_expr(&mut self, _expr: &super::expr::Call) -> Self::Output {
         todo!()
     }
-}
-
-pub fn print_example() {
-    let plus = Token::new(TokenType::Plus, "+".into(), None, 1);
-    let minus = Token::new(TokenType::Minus, "-".into(), None, 1);
-
-    let left = Literal::from(Value::from(0.0));
-    let right = Grouping::new(Unary::new(minus, Literal::from(Value::from(42.0)).into()).into());
-    let expr = Binary::new(left.into(), plus, right.into());
-
-    let printer = AstPrinter;
-    let s = printer.print(&expr);
-    println!("{}", s);
 }
