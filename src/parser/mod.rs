@@ -3,7 +3,7 @@ use std::vec;
 
 use crate::Value;
 use crate::error::StaticError;
-use crate::parser::ast::Context;
+use crate::parser::ast::{Ast, Context};
 use crate::parser::expr::{ExprNode, Variable};
 use crate::parser::stmt::StmtNode;
 use crate::scanner::token::{Token, TokenType};
@@ -34,9 +34,9 @@ impl Parser {
     /// Parses the full token stream as a sequence of statements until EOF.
     ///
     /// Returns:
-    /// - `Ok(Vec<StmtNode>)` with all parsed statements.
+    /// - `Ok(Ast)` with all parsed statements.
     /// - `Err(Report)` when any statement cannot be parsed.
-    pub fn parse(&mut self) -> Result<Vec<StmtNode>, StaticError> {
+    pub fn parse(&mut self) -> Result<Ast, StaticError> {
         let mut stmts = Vec::new();
 
         while !self.is_at_end() {
@@ -44,7 +44,10 @@ impl Parser {
             stmts.push(s);
         }
 
-        Ok(stmts)
+        Ok(Ast {
+            ctx: self.ctx,
+            stmts,
+        })
     }
 
     /// Parses a single expression from the current parser position.
@@ -624,7 +627,7 @@ mod tests {
         assert_eq!(expected_output, expr_str)
     }
 
-    fn parse_program(input: &str) -> Result<Vec<StmtNode>, StaticError> {
+    fn parse_program(input: &str) -> Result<Ast, StaticError> {
         let tokens = scan(input);
         let mut parser = Parser::from(tokens);
         parser.parse()
@@ -648,7 +651,9 @@ mod tests {
             print "bar"; print 76;
         "#;
 
-        let statements = parse_program(program).expect("Expected a valid program");
+        let statements = parse_program(program)
+            .expect("Expected a valid program")
+            .stmts;
         let actual = statements.iter().map(render_stmt).collect::<Vec<_>>();
         let expected = vec![
             "print baz",
@@ -676,7 +681,9 @@ mod tests {
             }
         "#;
 
-        let statements = parse_program(program).expect("Expected a valid program");
+        let statements = parse_program(program)
+            .expect("Expected a valid program")
+            .stmts;
         assert_eq!(1, statements.len());
 
         let block = statements[0]

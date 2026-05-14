@@ -126,29 +126,30 @@ pub struct StmtNode {
 }
 
 impl StmtNode {
-    /// Returns a cloned copy of this node's value, or `None` if the node
-    /// does not exist or is not of type `T`.
-    #[cfg(test)]
+    /// Returns a clone of this node's value, or `None` if the node is not of type `T`.
+    ///
+    /// # Panics
+    /// Panics if the node's id has been invalidated (removed)
     pub(super) fn get<T: 'static + Clone>(&self) -> Option<T> {
         let nodes = self.ctx.nodes.borrow();
-        nodes.get(self.id)?.downcast_ref::<T>().cloned()
+        let value = nodes[self.id].downcast_ref::<T>().cloned();
+        value
     }
 }
 
 impl Stmt for StmtNode {
     fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
-        let nodes = self.ctx.nodes.borrow();
-        let node = nodes[self.id].as_ref();
-
         match &self.kind {
-            StmtKind::Print => node.downcast_ref::<Print>().unwrap().accept(visitor),
-            StmtKind::Expression => node.downcast_ref::<Expression>().unwrap().accept(visitor),
-            StmtKind::Var => node.downcast_ref::<Var>().unwrap().accept(visitor),
-            StmtKind::Function => node.downcast_ref::<Function>().unwrap().accept(visitor),
-            StmtKind::Return => node.downcast_ref::<Return>().unwrap().accept(visitor),
-            StmtKind::If => node.downcast_ref::<If>().unwrap().accept(visitor),
-            StmtKind::While => node.downcast_ref::<While>().unwrap().accept(visitor),
-            StmtKind::Block => node.downcast_ref::<Block>().unwrap().accept(visitor),
+            // unwrap is safe here because we know the kind
+            // (nodes are only created with Context, so their kind is always correct)
+            StmtKind::Print => self.get::<Print>().unwrap().accept(visitor),
+            StmtKind::Expression => self.get::<Expression>().unwrap().accept(visitor),
+            StmtKind::Var => self.get::<Var>().unwrap().accept(visitor),
+            StmtKind::Function => self.get::<Function>().unwrap().accept(visitor),
+            StmtKind::Return => self.get::<Return>().unwrap().accept(visitor),
+            StmtKind::If => self.get::<If>().unwrap().accept(visitor),
+            StmtKind::While => self.get::<While>().unwrap().accept(visitor),
+            StmtKind::Block => self.get::<Block>().unwrap().accept(visitor),
         }
     }
 }

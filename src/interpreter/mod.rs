@@ -437,7 +437,7 @@ mod tests {
         let mut parser = Parser::from(tokens);
         let program = parser.parse().expect("Expected a valid program");
         let mut interpreter = Interpreter::new();
-        interpreter.interpret(&program)
+        interpreter.interpret(&program.stmts)
     }
 
     #[rstest]

@@ -3,6 +3,14 @@ use std::{any::Any, cell::RefCell};
 
 use slotmap::{SlotMap, new_key_type};
 
+use crate::parser::stmt::StmtNode;
+
+#[derive(Debug)]
+pub struct Ast {
+    pub ctx: &'static Context,
+    pub stmts: Vec<StmtNode>,
+}
+
 new_key_type! { pub(super) struct NodeId; }
 
 #[derive(Debug)]

@@ -41,7 +41,7 @@ fn run(filename: PathBuf) -> Result<(), Report> {
     let mut parser = Parser::from(tokens);
     let ast = parser.parse()?;
     let mut interpreter = Interpreter::new();
-    interpreter.interpret(&ast)?;
+    interpreter.interpret(&ast.stmts)?;
 
     Ok(())
 }

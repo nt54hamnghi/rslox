@@ -135,33 +135,30 @@ pub struct ExprNode {
 }
 
 impl ExprNode {
-    /// Returns a cloned copy of this node's value, or `None` if the node
-    /// does not exist or is not of type `T`.
+    /// Returns a clone of this node's value, or `None` if the node is not of type `T`.
+    ///
+    /// # Panics
+    /// Panics if the node's id has been invalidated (removed)
     pub(super) fn get<T: 'static + Clone>(&self) -> Option<T> {
         let nodes = self.ctx.nodes.borrow();
-        let value = nodes.get(self.id)?.downcast_ref::<T>().cloned();
+        let value = nodes[self.id].downcast_ref::<T>().cloned();
         value
     }
 }
 
 impl Expr for ExprNode {
     fn accept<V: Visitor>(&self, v: &mut V) -> V::Output {
-        let nodes = self.ctx.nodes.borrow();
-        // access the node using the node id
-        // this is safe if node ids are never invalidated
-        // FIXME: consider using .get instead
-        let node = nodes[self.id].as_ref();
-
         match &self.kind {
             // unwrap is safe here because we know the kind
-            ExprKind::Grouping => node.downcast_ref::<Grouping>().unwrap().accept(v),
-            ExprKind::Binary => node.downcast_ref::<Binary>().unwrap().accept(v),
-            ExprKind::Unary => node.downcast_ref::<Unary>().unwrap().accept(v),
-            ExprKind::Literal => node.downcast_ref::<Literal>().unwrap().accept(v),
-            ExprKind::Variable => node.downcast_ref::<Variable>().unwrap().accept(v),
-            ExprKind::Assign => node.downcast_ref::<Assign>().unwrap().accept(v),
-            ExprKind::Logical => node.downcast_ref::<Logical>().unwrap().accept(v),
-            ExprKind::Call => node.downcast_ref::<Call>().unwrap().accept(v),
+            // (nodes are only created with Context, so their kind is always correct)
+            ExprKind::Grouping => self.get::<Grouping>().unwrap().accept(v),
+            ExprKind::Binary => self.get::<Binary>().unwrap().accept(v),
+            ExprKind::Unary => self.get::<Unary>().unwrap().accept(v),
+            ExprKind::Literal => self.get::<Literal>().unwrap().accept(v),
+            ExprKind::Variable => self.get::<Variable>().unwrap().accept(v),
+            ExprKind::Assign => self.get::<Assign>().unwrap().accept(v),
+            ExprKind::Logical => self.get::<Logical>().unwrap().accept(v),
+            ExprKind::Call => self.get::<Call>().unwrap().accept(v),
         }
     }
 }
