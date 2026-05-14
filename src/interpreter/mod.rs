@@ -87,8 +87,7 @@ impl stmt::Visitor for Interpreter {
     fn visit_var_stmt(&mut self, stmt: &stmt::Var) -> Self::Output {
         let value = stmt
             .initializer
-            .as_deref()
-            .map(|e| self.evaluate(e))
+            .map(|e| self.evaluate(&e))
             .transpose()?
             .unwrap_or(Object::Primitive(Value::Nil));
 

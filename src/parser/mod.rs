@@ -5,7 +5,7 @@ use crate::Value;
 use crate::error::StaticError;
 use crate::parser::ast::Context;
 use crate::parser::expr::{ExprNode, Variable};
-use crate::parser::stmt::{Block, Expression, Function, If, Print, Return, StmtNode, Var, While};
+use crate::parser::stmt::StmtNode;
 use crate::scanner::token::{Token, TokenType};
 
 pub mod ast;
@@ -109,7 +109,7 @@ impl Parser {
 
         self.expect_semicolon()?;
 
-        Ok(Var::new(name, init).into())
+        Ok(self.ctx.new_var(name, init))
     }
 
     /// funDecl → "fun" function ;
@@ -145,7 +145,7 @@ impl Parser {
         )?;
         let body = self.block_statement()?;
 
-        Ok(Function::new(name, parameters, body).into())
+        Ok(self.ctx.new_function(name, parameters, body))
     }
 
     /// statement      → exprStmt
@@ -173,7 +173,7 @@ impl Parser {
         }
         if self.next_if(TokenType::LeftBrace).is_some() {
             let stmts = self.block_statement()?;
-            return Ok(Block::new(stmts).into());
+            return Ok(self.ctx.new_block(stmts));
         }
         self.expression_statement()
     }
@@ -188,7 +188,7 @@ impl Parser {
             TokenType::Semicolon,
             "Expect ';' after return value.".into(),
         )?;
-        Ok(Return::new(keyword, value).into())
+        Ok(self.ctx.new_return(keyword, value))
     }
 
     /// forStmt → "for" "(" ( varDecl | exprStmt | ";" ) expression? ";" expression? ")" statement ;
@@ -228,11 +228,13 @@ impl Parser {
         let mut body = self.statement()?;
 
         if let Some(incr) = incr {
-            body = Block::new(vec![body, Expression::new(incr).into()]).into();
+            body = self
+                .ctx
+                .new_block(vec![body, self.ctx.new_expression(incr)]);
         }
-        body = While::new(cond, body).into();
+        body = self.ctx.new_while(cond, body);
         if let Some(init) = init {
-            body = Block::new(vec![init, body]).into();
+            body = self.ctx.new_block(vec![init, body]);
         }
 
         Ok(body)
@@ -249,7 +251,7 @@ impl Parser {
 
         let body = self.statement()?;
 
-        Ok(While::new(cond, body).into())
+        Ok(self.ctx.new_while(cond, body))
     }
 
     // ifStmt → "if" "(" expression ")" statement ( "else" statement )? ;
@@ -268,7 +270,7 @@ impl Parser {
             else_branch = Some(self.statement()?)
         }
 
-        Ok(If::new(cond, then_branch, else_branch).into())
+        Ok(self.ctx.new_if(cond, then_branch, else_branch))
     }
 
     // block → "{" declaration* "}" ;
@@ -288,7 +290,7 @@ impl Parser {
         let expr = self.expression()?;
         self.expect_semicolon()?;
 
-        Ok(Print::new(expr).into())
+        Ok(self.ctx.new_print(expr))
     }
 
     // exprStmt → expression ";" ;
@@ -296,7 +298,7 @@ impl Parser {
         let expr = self.expression()?;
         self.expect_semicolon()?;
 
-        Ok(Expression::new(expr).into())
+        Ok(self.ctx.new_expression(expr))
     }
 
     /// expression → assignment ;
@@ -556,7 +558,7 @@ mod tests {
 
     use super::*;
     use crate::parser::printer::AstPrinter;
-    use crate::parser::stmt::StmtNode;
+    use crate::parser::stmt::{Block, Expression, Print, StmtNode, Var};
     use crate::scanner::{ScanItem, Scanner};
 
     fn scan(input: &str) -> Vec<Token> {
@@ -629,16 +631,13 @@ mod tests {
     }
 
     fn render_stmt(stmt: &StmtNode) -> String {
-        match stmt {
-            StmtNode::Print(print) => format!("print {}", AstPrinter.print(&*print.expr)),
-            StmtNode::Expression(expression) => AstPrinter.print(&*expression.expr),
-            StmtNode::Var(_) => todo!(),
-            StmtNode::Block(_) => todo!(),
-            StmtNode::If(_) => todo!(),
-            StmtNode::While(_) => todo!(),
-            StmtNode::Function(_) => todo!(),
-            StmtNode::Return(_) => todo!(),
+        if let Some(print) = stmt.get::<Print>() {
+            return format!("print {}", AstPrinter.print(&print.expr));
         }
+        if let Some(expression) = stmt.get::<Expression>() {
+            return AstPrinter.print(&expression.expr);
+        }
+        todo!()
     }
 
     #[test]
@@ -680,13 +679,13 @@ mod tests {
         let statements = parse_program(program).expect("Expected a valid program");
         assert_eq!(1, statements.len());
 
-        let StmtNode::Block(block) = &statements[0] else {
-            panic!("expected top-level block statement");
-        };
+        let block = statements[0]
+            .get::<Block>()
+            .expect("expected top-level block statement");
 
         assert_eq!(2, block.statements.len());
-        assert!(matches!(block.statements[0], StmtNode::Var(_)));
-        assert!(matches!(block.statements[1], StmtNode::Print(_)));
+        assert!(block.statements[0].get::<Var>().is_some());
+        assert!(block.statements[1].get::<Print>().is_some());
     }
 
     #[test]
