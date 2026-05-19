@@ -4,6 +4,7 @@ use crate::scanner::token::Token;
 
 pub trait Stmt {
     fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output;
+    fn id(&self) -> NodeId;
 }
 
 pub trait Visitor {
@@ -20,8 +21,10 @@ pub trait Visitor {
 
 impl Context {
     pub(super) fn new_print(&'static self, expr: ExprNode) -> StmtNode {
-        let node = Print { expr };
-        let id = self.nodes.borrow_mut().insert(Box::new(node));
+        let id = self
+            .nodes
+            .borrow_mut()
+            .insert_with_key(|id| Box::new(Print { id, expr }));
         StmtNode {
             ctx: self,
             id,
@@ -30,8 +33,10 @@ impl Context {
     }
 
     pub(super) fn new_expression(&'static self, expr: ExprNode) -> StmtNode {
-        let node = Expression { expr };
-        let id = self.nodes.borrow_mut().insert(Box::new(node));
+        let id = self
+            .nodes
+            .borrow_mut()
+            .insert_with_key(|id| Box::new(Expression { id, expr }));
         StmtNode {
             ctx: self,
             id,
@@ -40,8 +45,13 @@ impl Context {
     }
 
     pub(super) fn new_var(&'static self, name: Token, initializer: Option<ExprNode>) -> StmtNode {
-        let node = Var { name, initializer };
-        let id = self.nodes.borrow_mut().insert(Box::new(node));
+        let id = self.nodes.borrow_mut().insert_with_key(|id| {
+            Box::new(Var {
+                id,
+                name,
+                initializer,
+            })
+        });
         StmtNode {
             ctx: self,
             id,
@@ -55,12 +65,14 @@ impl Context {
         parameters: Vec<Token>,
         body: Vec<StmtNode>,
     ) -> StmtNode {
-        let node = Function {
-            name,
-            parameters,
-            body,
-        };
-        let id = self.nodes.borrow_mut().insert(Box::new(node));
+        let id = self.nodes.borrow_mut().insert_with_key(|id| {
+            Box::new(Function {
+                id,
+                name,
+                parameters,
+                body,
+            })
+        });
         StmtNode {
             ctx: self,
             id,
@@ -69,8 +81,10 @@ impl Context {
     }
 
     pub(super) fn new_return(&'static self, keyword: Token, value: Option<ExprNode>) -> StmtNode {
-        let node = Return { keyword, value };
-        let id = self.nodes.borrow_mut().insert(Box::new(node));
+        let id = self
+            .nodes
+            .borrow_mut()
+            .insert_with_key(|id| Box::new(Return { id, keyword, value }));
         StmtNode {
             ctx: self,
             id,
@@ -84,12 +98,14 @@ impl Context {
         then_branch: StmtNode,
         else_branch: Option<StmtNode>,
     ) -> StmtNode {
-        let node = If {
-            condition,
-            then_branch,
-            else_branch,
-        };
-        let id = self.nodes.borrow_mut().insert(Box::new(node));
+        let id = self.nodes.borrow_mut().insert_with_key(|id| {
+            Box::new(If {
+                id,
+                condition,
+                then_branch,
+                else_branch,
+            })
+        });
         StmtNode {
             ctx: self,
             id,
@@ -98,8 +114,13 @@ impl Context {
     }
 
     pub(super) fn new_while(&'static self, condition: ExprNode, body: StmtNode) -> StmtNode {
-        let node = While { condition, body };
-        let id = self.nodes.borrow_mut().insert(Box::new(node));
+        let id = self.nodes.borrow_mut().insert_with_key(|id| {
+            Box::new(While {
+                id,
+                condition,
+                body,
+            })
+        });
         StmtNode {
             ctx: self,
             id,
@@ -108,8 +129,10 @@ impl Context {
     }
 
     pub(super) fn new_block(&'static self, statements: Vec<StmtNode>) -> StmtNode {
-        let node = Block { statements };
-        let id = self.nodes.borrow_mut().insert(Box::new(node));
+        let id = self
+            .nodes
+            .borrow_mut()
+            .insert_with_key(|id| Box::new(Block { id, statements }));
         StmtNode {
             ctx: self,
             id,
@@ -129,10 +152,17 @@ impl StmtNode {
     /// Returns a clone of this node's value, or `None` if the node is not of type `T`.
     ///
     /// # Panics
-    /// Panics if the node's id has been invalidated (removed)
-    pub(super) fn get<T: 'static + Clone>(&self) -> Option<T> {
+    /// Panics if the node's id has been invalidated (removed), or if the underlying
+    /// stored value's id does not match this node's id.
+    pub(super) fn get<T: 'static + Clone + Stmt>(&self) -> Option<T> {
         let nodes = self.ctx.nodes.borrow();
         let value = nodes[self.id].downcast_ref::<T>().cloned();
+
+        assert!(
+            value.as_ref().is_none_or(|v| v.id() == self.id),
+            "stored statement node id does not match StmtNode id"
+        );
+
         value
     }
 }
@@ -152,6 +182,10 @@ impl Stmt for StmtNode {
             StmtKind::Block => self.get::<Block>().unwrap().accept(visitor),
         }
     }
+
+    fn id(&self) -> NodeId {
+        self.id
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -168,6 +202,7 @@ pub enum StmtKind {
 
 #[derive(Debug, Clone)]
 pub struct Print {
+    id: NodeId,
     pub expr: ExprNode,
 }
 
@@ -175,10 +210,15 @@ impl Stmt for Print {
     fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_print_stmt(self)
     }
+
+    fn id(&self) -> NodeId {
+        self.id
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Expression {
+    id: NodeId,
     pub expr: ExprNode,
 }
 
@@ -186,10 +226,15 @@ impl Stmt for Expression {
     fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_expression_stmt(self)
     }
+
+    fn id(&self) -> NodeId {
+        self.id
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Var {
+    id: NodeId,
     pub name: Token,
     pub initializer: Option<ExprNode>,
 }
@@ -198,10 +243,15 @@ impl Stmt for Var {
     fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_var_stmt(self)
     }
+
+    fn id(&self) -> NodeId {
+        self.id
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Function {
+    id: NodeId,
     pub name: Token,
     pub parameters: Vec<Token>,
     pub body: Vec<StmtNode>,
@@ -211,10 +261,15 @@ impl Stmt for Function {
     fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_function_stmt(self)
     }
+
+    fn id(&self) -> NodeId {
+        self.id
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Return {
+    id: NodeId,
     pub keyword: Token,
     pub value: Option<ExprNode>,
 }
@@ -223,10 +278,15 @@ impl Stmt for Return {
     fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_return_stmt(self)
     }
+
+    fn id(&self) -> NodeId {
+        self.id
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct If {
+    id: NodeId,
     pub condition: ExprNode,
     pub then_branch: StmtNode,
     pub else_branch: Option<StmtNode>,
@@ -236,10 +296,15 @@ impl Stmt for If {
     fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_if_stmt(self)
     }
+
+    fn id(&self) -> NodeId {
+        self.id
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct While {
+    id: NodeId,
     pub condition: ExprNode,
     pub body: StmtNode,
 }
@@ -248,15 +313,24 @@ impl Stmt for While {
     fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_while_stmt(self)
     }
+
+    fn id(&self) -> NodeId {
+        self.id
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Block {
+    id: NodeId,
     pub statements: Vec<StmtNode>,
 }
 
 impl Stmt for Block {
     fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_block_stmt(self)
+    }
+
+    fn id(&self) -> NodeId {
+        self.id
     }
 }

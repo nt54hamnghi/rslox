@@ -11,7 +11,7 @@ pub struct Ast {
     pub stmts: Vec<StmtNode>,
 }
 
-new_key_type! { pub(super) struct NodeId; }
+new_key_type! { pub struct NodeId; }
 
 #[derive(Debug)]
 pub struct Context {

@@ -227,7 +227,7 @@ impl expr::Visitor for Interpreter {
     type Output = Result<Object, RuntimeEvent>;
 
     /// Produces the value represented by a literal expression.
-    fn visit_literal_expr(&self, expr: &expr::Literal) -> Self::Output {
+    fn visit_literal_expr(&mut self, expr: &expr::Literal) -> Self::Output {
         Ok(expr.value.clone().into())
     }
 
@@ -262,7 +262,7 @@ impl expr::Visitor for Interpreter {
         }
     }
 
-    fn visit_variable_expr(&self, expr: &expr::Variable) -> Self::Output {
+    fn visit_variable_expr(&mut self, expr: &expr::Variable) -> Self::Output {
         self.environment.borrow().get(&expr.name)
     }
 

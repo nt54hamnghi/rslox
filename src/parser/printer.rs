@@ -25,7 +25,7 @@ impl Visitor for AstPrinter {
     type Output = String;
 
     fn visit_grouping_expr(&mut self, expr: &Grouping) -> Self::Output {
-        let Grouping { expression } = expr;
+        let Grouping { expression, .. } = expr;
         parenthesize!(self, "group", expression)
     }
 
@@ -34,20 +34,23 @@ impl Visitor for AstPrinter {
             left,
             operator,
             right,
+            ..
         } = expr;
         parenthesize!(self, operator.lexeme, left, right)
     }
 
     fn visit_unary_expr(&mut self, expr: &Unary) -> Self::Output {
-        let Unary { operator, right } = expr;
+        let Unary {
+            operator, right, ..
+        } = expr;
         parenthesize!(self, operator.lexeme, right)
     }
 
-    fn visit_literal_expr(&self, expr: &Literal) -> Self::Output {
+    fn visit_literal_expr(&mut self, expr: &Literal) -> Self::Output {
         format!("{:?}", expr.value)
     }
 
-    fn visit_variable_expr(&self, _expr: &super::expr::Variable) -> Self::Output {
+    fn visit_variable_expr(&mut self, _expr: &super::expr::Variable) -> Self::Output {
         todo!()
     }
 
