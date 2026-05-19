@@ -7,6 +7,7 @@ pub mod cli;
 pub mod error;
 pub mod interpreter;
 pub mod parser;
+pub mod resolver;
 pub mod scanner;
 
 #[derive(Debug, Clone)]

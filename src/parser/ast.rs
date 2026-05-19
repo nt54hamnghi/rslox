@@ -1,5 +1,6 @@
+use std::any::Any;
+use std::cell::RefCell;
 use std::fmt::Debug;
-use std::{any::Any, cell::RefCell};
 
 use slotmap::{SlotMap, new_key_type};
 
