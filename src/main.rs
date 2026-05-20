@@ -10,8 +10,10 @@ use codecrafters_interpreter::interpreter::Interpreter;
 use codecrafters_interpreter::parser::Parser;
 use codecrafters_interpreter::parser::expr::ExprNode;
 use codecrafters_interpreter::parser::printer::AstPrinter;
+use codecrafters_interpreter::resolver::Resolver;
 use codecrafters_interpreter::scanner::token::Token;
 use codecrafters_interpreter::scanner::{ScanItem, Scanner};
+use slotmap::SecondaryMap;
 
 /// Parses CLI arguments and dispatches to the selected subcommand.
 fn main() {
@@ -38,9 +40,14 @@ fn main() {
 
 fn run(filename: PathBuf) -> Result<(), Report> {
     let tokens = tokenize(filename, null());
+
     let mut parser = Parser::from(tokens);
     let ast = parser.parse()?;
-    let mut interpreter = Interpreter::new();
+
+    let resolver = Resolver::new();
+    let bindings = resolver.resolve(&ast.stmts)?;
+
+    let mut interpreter = Interpreter::new(bindings);
     interpreter.interpret(&ast.stmts)?;
 
     Ok(())
@@ -51,7 +58,8 @@ fn run(filename: PathBuf) -> Result<(), Report> {
 /// Exits with code `70` if runtime evaluation fails.
 fn evaluate(filename: PathBuf, mut sink: impl io::Write) {
     let expr = parse(filename, null());
-    let mut interpreter = Interpreter::new();
+
+    let mut interpreter = Interpreter::new(SecondaryMap::new());
     match interpreter.evaluate(&expr) {
         Ok(val) => writeln!(sink, "{}", val).unwrap(),
         Err(err) => {

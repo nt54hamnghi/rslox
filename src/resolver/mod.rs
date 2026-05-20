@@ -26,7 +26,15 @@ impl Resolver {
         }
     }
 
-    fn resolve(&mut self, stmts: &[StmtNode]) -> Result<(), StaticError> {
+    pub fn resolve(
+        mut self,
+        stmts: &[StmtNode],
+    ) -> Result<SecondaryMap<NodeId, usize>, StaticError> {
+        self.resolve_body(stmts)?;
+        Ok(self.bindings)
+    }
+
+    fn resolve_body(&mut self, stmts: &[StmtNode]) -> Result<(), StaticError> {
         for s in stmts {
             s.accept(self)?;
         }
@@ -41,7 +49,7 @@ impl Resolver {
         expr.accept(self)
     }
 
-    fn resolve_local(&mut self, id: NodeId, name: &Token) {
+    fn resolve_local(&mut self, expr: &impl Expr, name: &Token) {
         let Some(p) = self
             .scopes
             .iter()
@@ -53,9 +61,7 @@ impl Resolver {
         };
 
         let distance = self.scopes.len() - 1 - p;
-        if let None = self.bindings.insert(id, distance) {
-            panic!("Node id has been invalidated")
-        }
+        self.bindings.insert(expr.id(), distance);
     }
 
     fn resolve_function(&mut self, fun: &stmt::Function) -> Result<(), StaticError> {
@@ -64,7 +70,7 @@ impl Resolver {
             self.declare(param);
             self.define(param);
         }
-        self.resolve(&fun.body)?;
+        self.resolve_body(&fun.body)?;
         self.end_scope();
         Ok(())
     }
@@ -143,7 +149,7 @@ impl stmt::Visitor for Resolver {
 
     fn visit_block_stmt(&mut self, stmt: &stmt::Block) -> Self::Output {
         self.begin_scope();
-        self.resolve(&stmt.statements)?;
+        self.resolve_body(&stmt.statements)?;
         self.end_scope();
         Ok(())
     }
@@ -185,13 +191,13 @@ impl expr::Visitor for Resolver {
             ));
         }
 
-        self.resolve_local(expr.id(), &expr.name);
+        self.resolve_local(expr, &expr.name);
         Ok(())
     }
 
     fn visit_assign_expr(&mut self, expr: &expr::Assign) -> Self::Output {
         self.resolve_expression(expr.value)?;
-        self.resolve_local(expr.id(), &expr.name);
+        self.resolve_local(expr, &expr.name);
         Ok(())
     }
 

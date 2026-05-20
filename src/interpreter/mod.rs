@@ -2,10 +2,13 @@ use std::cell::RefCell;
 use std::ops::Not;
 use std::rc::Rc;
 
+use slotmap::SecondaryMap;
+
 use crate::interpreter::callable::function::LoxFunction;
 use crate::interpreter::callable::native::ClockNativeFunction;
 use crate::interpreter::environment::{Environment, EnvironmentRef};
 use crate::interpreter::error::RuntimeEvent;
+use crate::parser::ast::NodeId;
 use crate::parser::expr::{self, Binary, Expr, ExprNode};
 use crate::parser::stmt::{self, Stmt, StmtNode};
 use crate::scanner::token::{Token, TokenType};
@@ -32,19 +35,33 @@ impl Object {
 
 #[derive(Debug)]
 pub struct Interpreter {
+    /// Currently entered environment
     environment: EnvironmentRef,
+    /// Global environment
+    globals: EnvironmentRef,
+    /// Locals map of variable usages to resolved locations
+    locals: SecondaryMap<NodeId, usize>,
+}
+
+fn new_globals() -> Rc<RefCell<Environment>> {
+    let mut globals = Environment::new();
+    globals.define(
+        "clock".to_owned(),
+        Object::Function(Rc::new(ClockNativeFunction)),
+    );
+    Rc::new(RefCell::new(globals))
 }
 
 impl Interpreter {
-    pub fn new() -> Self {
-        let mut globals = Environment::new();
-        globals.define(
-            "clock".to_owned(),
-            Object::Function(Rc::new(ClockNativeFunction)),
-        );
+    pub fn new(locals: SecondaryMap<NodeId, usize>) -> Self {
+        let globals = new_globals();
 
         Self {
-            environment: Rc::new(RefCell::new(globals)),
+            // the interpreter starts with the global environment
+            // as its current environment
+            environment: Rc::clone(&globals),
+            globals,
+            locals,
         }
     }
 
@@ -67,6 +84,21 @@ impl Interpreter {
     /// Returns the resulting value or a runtime error when evaluation fails.
     pub fn evaluate(&mut self, expr: &ExprNode) -> Result<Object, RuntimeEvent> {
         Expr::accept(expr, self)
+    }
+
+    fn lookup_variable(&self, name: &Token, expr: &impl Expr) -> Result<Object, RuntimeEvent> {
+        // the locals map only contains resolutions for local variables
+        // fallback to the global environment if a distance is not found
+        match self.locals.get(expr.id()) {
+            Some(distance) => {
+                // unwrap is safe here as the resolved distance exists for the variable in the locals map,
+                // which is from the bindings provided by the resolver walking the AST and resolving variables.
+                // It's a bug if the resolver fails to do so correctly.
+                let value = self.environment.borrow().get_at(name, *distance).unwrap();
+                Ok(value)
+            }
+            None => self.globals.borrow().get(name),
+        }
     }
 }
 
@@ -263,14 +295,24 @@ impl expr::Visitor for Interpreter {
     }
 
     fn visit_variable_expr(&mut self, expr: &expr::Variable) -> Self::Output {
-        self.environment.borrow().get(&expr.name)
+        self.lookup_variable(&expr.name, expr)
     }
 
     fn visit_assign_expr(&mut self, expr: &expr::Assign) -> Self::Output {
         let value = self.evaluate(&expr.value)?;
-        self.environment
-            .borrow_mut()
-            .assign(&expr.name, value.clone())?;
+
+        match self.locals.get(expr.id()) {
+            Some(distance) => {
+                self.environment
+                    .borrow_mut()
+                    .assign_at(&expr.name, value.clone(), *distance);
+            }
+            None => self
+                .environment
+                .borrow_mut()
+                .assign(&expr.name, value.clone())?,
+        };
+
         Ok(value)
     }
 
@@ -396,7 +438,9 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
+    use crate::error::Report;
     use crate::parser::Parser;
+    use crate::resolver::Resolver;
     use crate::scanner::{ScanItem, Scanner};
 
     fn assert_primitive_output(expected: Value, actual: Object) {
@@ -420,11 +464,12 @@ mod tests {
         let expr = parser
             .parse_expression()
             .expect("Expected a valid expression");
-        let mut interpreter = Interpreter::new();
+
+        let mut interpreter = Interpreter::new(SecondaryMap::new());
         interpreter.evaluate(&expr)
     }
 
-    fn interpret_program(input: &str) -> Result<(), RuntimeEvent> {
+    fn interpret_program(input: &str) -> Result<(), Report> {
         let tokens = Scanner::new(input)
             .scan_tokens()
             .filter_map(|r| match r {
@@ -435,9 +480,15 @@ mod tests {
             .collect::<Vec<_>>();
 
         let mut parser = Parser::from(tokens);
-        let program = parser.parse().expect("Expected a valid program");
-        let mut interpreter = Interpreter::new();
-        interpreter.interpret(&program.stmts)
+        let ast = parser.parse().expect("Expected a valid program");
+
+        let resolver = Resolver::new();
+        let bindings = resolver.resolve(&ast.stmts)?;
+
+        let mut interpreter = Interpreter::new(bindings);
+        interpreter.interpret(&ast.stmts)?;
+
+        Ok(())
     }
 
     #[rstest]
