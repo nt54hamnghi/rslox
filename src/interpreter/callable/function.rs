@@ -8,7 +8,7 @@ use crate::parser::stmt::Function;
 use crate::{Object, Value};
 
 #[derive(Debug)]
-pub(crate) struct LoxFunction {
+pub struct LoxFunction {
     declaration: Function,
     closure: EnvironmentRef,
 }
@@ -27,7 +27,7 @@ impl Callable for LoxFunction {
         let mut env = Environment::with_enclosing(self.closure.clone());
 
         for (param, arg) in self.declaration.parameters.iter().zip(args) {
-            env.define(param.lexeme.clone(), arg.clone());
+            env.define(param, arg.clone());
         }
 
         let Err(event) = interpreter.execute_block_with(&self.declaration.body, env) else {

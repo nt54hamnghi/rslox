@@ -16,6 +16,20 @@ pub enum Object {
     Function(Rc<dyn Callable>),
 }
 
+impl Object {
+    pub fn primitive<T: Into<Value>>(value: T) -> Self {
+        Object::Primitive(value.into())
+    }
+
+    pub fn function<T: Callable + 'static>(fun: T) -> Self {
+        Object::Function(Rc::new(fun))
+    }
+
+    pub fn nil() -> Self {
+        Object::Primitive(Value::Nil)
+    }
+}
+
 impl<T> From<T> for Object
 where
     T: Into<Value>,

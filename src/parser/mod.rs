@@ -5,7 +5,7 @@ use crate::Value;
 use crate::error::StaticError;
 use crate::parser::ast::{Ast, Context};
 use crate::parser::expr::{ExprNode, Variable};
-use crate::parser::stmt::StmtNode;
+use crate::parser::stmt::{Function, StmtNode};
 use crate::scanner::token::{Token, TokenType};
 
 pub mod ast;
@@ -90,8 +90,11 @@ impl Parser {
         }
     }
 
-    // declaration → varDecl | funDecl | statement ;
+    /// declaration → classDecl | varDecl | funDecl | statement ;
     fn declaration(&mut self) -> Result<StmtNode, StaticError> {
+        if self.next_if(TokenType::Class).is_some() {
+            return self.class_declaration();
+        }
         if self.next_if(TokenType::Fun).is_some() {
             return self.function_declaration("function");
         }
@@ -101,7 +104,32 @@ impl Parser {
         self.statement()
     }
 
-    // varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
+    /// classDecl → "class" IDENTIFIER "{" function* "}";
+    fn class_declaration(&mut self) -> Result<StmtNode, StaticError> {
+        let name = self.next_ok(TokenType::Identifier, "Expect class name.".to_owned())?;
+        self.next_ok(
+            TokenType::LeftBrace,
+            "Expect '{' before class body.".to_owned(),
+        )?;
+
+        let mut methods = Vec::new();
+        while !self.peek_check(TokenType::RightBrace) && !self.is_at_end() {
+            let fun = self
+                .function_declaration("method")?
+                .get::<Function>()
+                .unwrap();
+            methods.push(fun);
+        }
+
+        self.next_ok(
+            TokenType::RightBrace,
+            "Expect '}' after class body.".to_owned(),
+        )?;
+
+        Ok(self.ctx.new_class(name, methods))
+    }
+
+    /// varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
     fn var_declaration(&mut self) -> Result<StmtNode, StaticError> {
         let name = self.next_ok(TokenType::Identifier, "Expect variable name.".into())?;
 

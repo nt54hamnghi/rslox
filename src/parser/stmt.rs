@@ -17,6 +17,7 @@ pub trait Visitor {
     fn visit_if_stmt(&mut self, stmt: &If) -> Self::Output;
     fn visit_while_stmt(&mut self, stmt: &While) -> Self::Output;
     fn visit_block_stmt(&mut self, stmt: &Block) -> Self::Output;
+    fn visit_class_stmt(&mut self, stmt: &Class) -> Self::Output;
 }
 
 impl Context {
@@ -139,6 +140,18 @@ impl Context {
             kind: StmtKind::Block,
         }
     }
+
+    pub(super) fn new_class(&'static self, name: Token, methods: Vec<Function>) -> StmtNode {
+        let id = self
+            .nodes
+            .borrow_mut()
+            .insert_with_key(|id| Box::new(Class { id, name, methods }));
+        StmtNode {
+            ctx: self,
+            id,
+            kind: StmtKind::Class,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -180,6 +193,7 @@ impl Stmt for StmtNode {
             StmtKind::If => self.get::<If>().unwrap().accept(visitor),
             StmtKind::While => self.get::<While>().unwrap().accept(visitor),
             StmtKind::Block => self.get::<Block>().unwrap().accept(visitor),
+            StmtKind::Class => self.get::<Class>().unwrap().accept(visitor),
         }
     }
 
@@ -198,6 +212,24 @@ pub enum StmtKind {
     If,
     While,
     Block,
+    Class,
+}
+
+#[derive(Debug, Clone)]
+pub struct Class {
+    id: NodeId,
+    pub name: Token,
+    pub methods: Vec<Function>,
+}
+
+impl Stmt for Class {
+    fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
+        visitor.visit_class_stmt(self)
+    }
+
+    fn id(&self) -> NodeId {
+        self.id
+    }
 }
 
 #[derive(Debug, Clone)]

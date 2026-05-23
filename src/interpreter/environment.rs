@@ -14,6 +14,15 @@ pub struct Environment {
     pub enclosing: Option<EnvironmentRef>,
 }
 
+impl From<HashMap<String, Object>> for Environment {
+    fn from(value: HashMap<String, Object>) -> Self {
+        Self {
+            values: value,
+            enclosing: None,
+        }
+    }
+}
+
 impl Environment {
     /// Creates a new global [`Environment`] with no enclosing scope.
     pub fn new() -> Self {
@@ -32,8 +41,8 @@ impl Environment {
     }
 
     /// Defines a new variable in the environment by inserting the key-value pair.
-    pub fn define(&mut self, key: String, value: Object) {
-        self.values.insert(key, value);
+    pub fn define(&mut self, key: &Token, value: Object) {
+        self.values.insert(key.lexeme.clone(), value);
     }
 
     /// Retrieves the value of a variable in this environment,

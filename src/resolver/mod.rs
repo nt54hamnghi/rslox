@@ -193,6 +193,12 @@ impl stmt::Visitor for Resolver {
         self.end_scope();
         Ok(())
     }
+
+    fn visit_class_stmt(&mut self, stmt: &stmt::Class) -> Self::Output {
+        self.declare(&stmt.name)?;
+        self.define(&stmt.name);
+        Ok(())
+    }
 }
 
 impl expr::Visitor for Resolver {

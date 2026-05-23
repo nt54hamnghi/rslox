@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ops::Not;
 use std::rc::Rc;
 
@@ -6,6 +7,7 @@ use slotmap::SecondaryMap;
 
 use crate::interpreter::callable::function::LoxFunction;
 use crate::interpreter::callable::native::ClockNativeFunction;
+use crate::interpreter::class::LoxClass;
 use crate::interpreter::environment::{Environment, EnvironmentRef};
 use crate::interpreter::error::RuntimeEvent;
 use crate::parser::ast::NodeId;
@@ -15,6 +17,7 @@ use crate::scanner::token::{Token, TokenType};
 use crate::{Object, Value};
 
 pub(crate) mod callable;
+mod class;
 mod environment;
 pub mod error;
 
@@ -44,11 +47,11 @@ pub struct Interpreter {
 }
 
 fn new_globals() -> Rc<RefCell<Environment>> {
-    let mut globals = Environment::new();
-    globals.define(
+    let globals = Environment::from(HashMap::from([(
         "clock".to_owned(),
-        Object::Function(Rc::new(ClockNativeFunction)),
-    );
+        Object::function(ClockNativeFunction),
+    )]));
+
     Rc::new(RefCell::new(globals))
 }
 
@@ -123,9 +126,7 @@ impl stmt::Visitor for Interpreter {
             .transpose()?
             .unwrap_or(Object::Primitive(Value::Nil));
 
-        self.environment
-            .borrow_mut()
-            .define(stmt.name.lexeme.clone(), value);
+        self.environment.borrow_mut().define(&stmt.name, value);
 
         Ok(())
     }
@@ -134,7 +135,7 @@ impl stmt::Visitor for Interpreter {
         let function = LoxFunction::new(stmt.clone(), self.environment.clone());
         self.environment
             .borrow_mut()
-            .define(stmt.name.lexeme.clone(), function.into());
+            .define(&stmt.name, function.into());
         Ok(())
     }
 
@@ -171,6 +172,20 @@ impl stmt::Visitor for Interpreter {
 
     fn visit_block_stmt(&mut self, stmt: &stmt::Block) -> Self::Output {
         self.execute_block(&stmt.statements)
+    }
+
+    fn visit_class_stmt(&mut self, stmt: &stmt::Class) -> Self::Output {
+        self.environment
+            .borrow_mut()
+            .define(&stmt.name, Object::nil());
+
+        let class = LoxClass::new(stmt.name.lexeme.to_owned());
+
+        self.environment
+            .borrow_mut()
+            .assign(&stmt.name, Object::function(class))?;
+
+        Ok(())
     }
 }
 

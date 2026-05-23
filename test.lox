@@ -1,13 +1,7 @@
-fun makeCounter() {
-    var i = 0;
-    fun count() {
-        i = i + 6;
-        print i;
+class Greeter {
+    hello() {
+        print "Hello, World!";
     }
-
-    return count;
 }
 
-var counter = makeCounter();
-counter();
-counter();
+print Greeter;
