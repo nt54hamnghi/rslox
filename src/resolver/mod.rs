@@ -8,6 +8,13 @@ use crate::parser::expr::{self, Expr, ExprNode};
 use crate::parser::stmt::{self, Stmt, StmtNode};
 use crate::scanner::token::Token;
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum FunctionType {
+    #[default]
+    None,
+    Function,
+}
+
 /// A map of variable names to their resolved state.
 /// The boolean value indicates whether the variable's
 /// initializer has been resolved.
@@ -16,6 +23,7 @@ type Scope = HashMap<String, bool>;
 pub struct Resolver {
     bindings: SecondaryMap<NodeId, usize>,
     scopes: Vec<Scope>,
+    current_function: FunctionType,
 }
 
 impl Resolver {
@@ -23,6 +31,7 @@ impl Resolver {
         Self {
             bindings: SecondaryMap::new(),
             scopes: Vec::new(),
+            current_function: FunctionType::default(),
         }
     }
 
@@ -64,15 +73,31 @@ impl Resolver {
         self.bindings.insert(expr.id(), distance);
     }
 
-    fn resolve_function(&mut self, fun: &stmt::Function) -> Result<(), StaticError> {
-        self.begin_scope();
-        for param in fun.parameters.iter() {
-            self.declare(param);
-            self.define(param);
-        }
-        self.resolve_body(&fun.body)?;
-        self.end_scope();
-        Ok(())
+    fn resolve_function(
+        &mut self,
+        fun: &stmt::Function,
+        typ: FunctionType,
+    ) -> Result<(), StaticError> {
+        self.with_function(typ, |this| {
+            this.begin_scope();
+            for param in fun.parameters.iter() {
+                this.declare(param)?;
+                this.define(param);
+            }
+            this.resolve_body(&fun.body)?;
+            this.end_scope();
+            Ok(())
+        })
+    }
+
+    fn with_function<F>(self: &mut Self, typ: FunctionType, op: F) -> Result<(), StaticError>
+    where
+        F: FnOnce(&mut Self) -> Result<(), StaticError>,
+    {
+        let enclosing = std::mem::replace(&mut self.current_function, typ);
+        let result = op(self);
+        self.current_function = enclosing;
+        result
     }
 
     fn begin_scope(&mut self) {
@@ -83,11 +108,20 @@ impl Resolver {
         self.scopes.pop();
     }
 
-    fn declare(&mut self, name: &Token) {
+    fn declare(&mut self, name: &Token) -> Result<(), StaticError> {
         let Some(current) = self.scopes.last_mut() else {
-            return;
+            return Ok(());
         };
+
+        if current.contains_key(&name.lexeme) {
+            return Err(StaticError::error_at_token(
+                name,
+                "Already a variable with this name in this scope.".to_owned(),
+            ));
+        }
+
         current.insert(name.lexeme.to_owned(), false);
+        Ok(())
     }
 
     fn define(&mut self, name: &Token) {
@@ -110,7 +144,7 @@ impl stmt::Visitor for Resolver {
     }
 
     fn visit_var_stmt(&mut self, stmt: &stmt::Var) -> Self::Output {
-        self.declare(&stmt.name);
+        self.declare(&stmt.name)?;
         if let Some(init) = stmt.initializer {
             self.resolve_expression(init)?;
         }
@@ -119,13 +153,19 @@ impl stmt::Visitor for Resolver {
     }
 
     fn visit_function_stmt(&mut self, stmt: &stmt::Function) -> Self::Output {
-        self.declare(&stmt.name);
+        self.declare(&stmt.name)?;
         self.define(&stmt.name);
-        self.resolve_function(stmt)?;
+        self.resolve_function(stmt, FunctionType::Function)?;
         Ok(())
     }
 
     fn visit_return_stmt(&mut self, stmt: &stmt::Return) -> Self::Output {
+        if self.current_function == FunctionType::None {
+            return Err(StaticError::error_at_token(
+                &stmt.keyword,
+                "Can't return from top-level code.".to_owned(),
+            ));
+        }
         if let Some(value) = stmt.value {
             self.resolve_expression(value)?;
         }

@@ -174,8 +174,8 @@ impl stmt::Visitor for Interpreter {
     }
 }
 
-/// A guard that restores the interpreter's previous environment when temporary
-/// block execution ends.
+/// A guard that restores the interpreter's previous environment
+/// when temporary block execution ends.
 struct BlockGuard<'i> {
     interpreter: &'i mut Interpreter,
     previous: EnvironmentRef,
