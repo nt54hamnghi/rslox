@@ -17,7 +17,7 @@ use crate::scanner::token::{Token, TokenType};
 use crate::{Object, Value};
 
 pub(crate) mod callable;
-mod class;
+pub(crate) mod class;
 mod environment;
 pub mod error;
 
@@ -26,7 +26,7 @@ impl Object {
     /// `nil` is false, booleans keep their value, and all other values are true.
     fn is_truthy(&self) -> bool {
         match self {
-            Object::Function(_) => true,
+            Object::Function(_) | Object::Instance(_) => true,
             Object::Primitive(value) => match value {
                 Value::Nil => false,
                 Value::Boolean(b) => *b,
@@ -132,10 +132,10 @@ impl stmt::Visitor for Interpreter {
     }
 
     fn visit_function_stmt(&mut self, stmt: &stmt::Function) -> Self::Output {
-        let function = LoxFunction::new(stmt.clone(), self.environment.clone());
+        let f = LoxFunction::new(stmt.clone(), self.environment.clone());
         self.environment
             .borrow_mut()
-            .define(&stmt.name, function.into());
+            .define(&stmt.name, Object::function(f));
         Ok(())
     }
 
@@ -183,7 +183,7 @@ impl stmt::Visitor for Interpreter {
 
         self.environment
             .borrow_mut()
-            .assign(&stmt.name, Object::function(class))?;
+            .assign(&stmt.name, Object::function(Rc::new(class)))?;
 
         Ok(())
     }

@@ -24,14 +24,6 @@ impl From<HashMap<String, Object>> for Environment {
 }
 
 impl Environment {
-    /// Creates a new global [`Environment`] with no enclosing scope.
-    pub fn new() -> Self {
-        Self {
-            values: HashMap::new(),
-            enclosing: None,
-        }
-    }
-
     /// Creates a new [`Environment`] with the given [`Environment`] as its enclosing scope.
     pub fn with_enclosing(env: EnvironmentRef) -> Self {
         Self {

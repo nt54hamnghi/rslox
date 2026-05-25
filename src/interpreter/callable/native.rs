@@ -6,7 +6,7 @@ use crate::interpreter::Interpreter;
 use crate::interpreter::callable::Callable;
 use crate::interpreter::error::RuntimeEvent;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ClockNativeFunction;
 
 impl Callable for ClockNativeFunction {

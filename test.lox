@@ -1,7 +1,4 @@
-class Greeter {
-    hello() {
-        print "Hello, World!";
-    }
-}
+class Bagel {}
 
-print Greeter;
+print Bagel;
+print Bagel();

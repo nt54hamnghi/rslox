@@ -1,5 +1,4 @@
 use std::fmt::Display;
-use std::rc::Rc;
 
 use crate::interpreter::callable::Callable;
 use crate::interpreter::error::RuntimeEvent;
@@ -7,7 +6,7 @@ use crate::interpreter::{Environment, EnvironmentRef, Interpreter};
 use crate::parser::stmt::Function;
 use crate::{Object, Value};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LoxFunction {
     declaration: Function,
     closure: EnvironmentRef,
@@ -48,11 +47,5 @@ impl Callable for LoxFunction {
 impl Display for LoxFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "<fn {}>", self.declaration.name.lexeme)
-    }
-}
-
-impl From<LoxFunction> for Object {
-    fn from(value: LoxFunction) -> Self {
-        Object::Function(Rc::new(value))
     }
 }
