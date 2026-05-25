@@ -444,13 +444,23 @@ impl Parser {
         self.call()
     }
 
-    /// call → primary ( "(" arguments? ")" )* ;
+    /// call → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
     /// arguments → expression ( "," expression )* ;
     fn call(&mut self) -> Result<ExprNode, StaticError> {
         let mut expr = self.primary()?;
 
-        while self.next_if(TokenType::LeftParen).is_some() {
-            expr = self.finish_call(expr)?;
+        loop {
+            if self.next_if(TokenType::LeftParen).is_some() {
+                expr = self.finish_call(expr)?;
+            } else if self.next_if(TokenType::Dot).is_some() {
+                let name = self.next_ok(
+                    TokenType::Identifier,
+                    "Expect property name after '.'.".to_owned(),
+                )?;
+                expr = self.ctx.new_get(expr, name);
+            } else {
+                break;
+            }
         }
 
         Ok(expr)

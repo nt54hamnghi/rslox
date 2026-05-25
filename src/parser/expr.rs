@@ -12,6 +12,7 @@ pub trait Visitor {
     fn visit_literal_expr(&mut self, expr: &Literal) -> Self::Output;
     fn visit_grouping_expr(&mut self, expr: &Grouping) -> Self::Output;
     fn visit_call_expr(&mut self, expr: &Call) -> Self::Output;
+    fn visit_get_expr(&mut self, expr: &Get) -> Self::Output;
     fn visit_unary_expr(&mut self, expr: &Unary) -> Self::Output;
     fn visit_variable_expr(&mut self, expr: &Variable) -> Self::Output;
     fn visit_assign_expr(&mut self, expr: &Assign) -> Self::Output;
@@ -50,6 +51,18 @@ impl Context {
             ctx: self,
             id,
             kind: ExprKind::Call,
+        }
+    }
+
+    pub(super) fn new_get(&'static self, object: ExprNode, name: Token) -> ExprNode {
+        let id = self
+            .nodes
+            .borrow_mut()
+            .insert_with_key(|id| Box::new(Get { id, object, name }));
+        ExprNode {
+            ctx: self,
+            id,
+            kind: ExprKind::Get,
         }
     }
 
@@ -186,6 +199,7 @@ impl Expr for ExprNode {
             ExprKind::Assign => self.get::<Assign>().unwrap().accept(visitor),
             ExprKind::Logical => self.get::<Logical>().unwrap().accept(visitor),
             ExprKind::Call => self.get::<Call>().unwrap().accept(visitor),
+            ExprKind::Get => self.get::<Get>().unwrap().accept(visitor),
         }
     }
 
@@ -198,6 +212,7 @@ impl Expr for ExprNode {
 pub enum ExprKind {
     Grouping,
     Call,
+    Get,
     Binary,
     Logical,
     Unary,
@@ -233,6 +248,23 @@ pub struct Call {
 impl Expr for Call {
     fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_call_expr(self)
+    }
+
+    fn id(&self) -> NodeId {
+        self.id
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Get {
+    id: NodeId,
+    pub object: ExprNode,
+    pub name: Token,
+}
+
+impl Expr for Get {
+    fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
+        visitor.visit_get_expr(self)
     }
 
     fn id(&self) -> NodeId {

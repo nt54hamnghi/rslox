@@ -220,6 +220,10 @@ impl expr::Visitor for Resolver {
         Ok(())
     }
 
+    fn visit_get_expr(&mut self, expr: &expr::Get) -> Self::Output {
+        self.resolve_expression(expr.object)
+    }
+
     fn visit_unary_expr(&mut self, expr: &expr::Unary) -> Self::Output {
         self.resolve_expression(expr.right)
     }

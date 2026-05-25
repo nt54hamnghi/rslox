@@ -24,19 +24,21 @@ macro_rules! parenthesize {
 impl Visitor for AstPrinter {
     type Output = String;
 
+    fn visit_literal_expr(&mut self, expr: &Literal) -> Self::Output {
+        format!("{:?}", expr.value)
+    }
+
     fn visit_grouping_expr(&mut self, expr: &Grouping) -> Self::Output {
         let Grouping { expression, .. } = expr;
         parenthesize!(self, "group", expression)
     }
 
-    fn visit_binary_expr(&mut self, expr: &Binary) -> Self::Output {
-        let Binary {
-            left,
-            operator,
-            right,
-            ..
-        } = expr;
-        parenthesize!(self, operator.lexeme, left, right)
+    fn visit_call_expr(&mut self, _expr: &super::expr::Call) -> Self::Output {
+        todo!()
+    }
+
+    fn visit_get_expr(&mut self, _expr: &super::expr::Get) -> Self::Output {
+        todo!()
     }
 
     fn visit_unary_expr(&mut self, expr: &Unary) -> Self::Output {
@@ -44,10 +46,6 @@ impl Visitor for AstPrinter {
             operator, right, ..
         } = expr;
         parenthesize!(self, operator.lexeme, right)
-    }
-
-    fn visit_literal_expr(&mut self, expr: &Literal) -> Self::Output {
-        format!("{:?}", expr.value)
     }
 
     fn visit_variable_expr(&mut self, _expr: &super::expr::Variable) -> Self::Output {
@@ -62,7 +60,13 @@ impl Visitor for AstPrinter {
         todo!()
     }
 
-    fn visit_call_expr(&mut self, _expr: &super::expr::Call) -> Self::Output {
-        todo!()
+    fn visit_binary_expr(&mut self, expr: &Binary) -> Self::Output {
+        let Binary {
+            left,
+            operator,
+            right,
+            ..
+        } = expr;
+        parenthesize!(self, operator.lexeme, left, right)
     }
 }

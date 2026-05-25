@@ -9,7 +9,7 @@ use crate::interpreter::callable::function::LoxFunction;
 use crate::interpreter::callable::native::ClockNativeFunction;
 use crate::interpreter::class::LoxClass;
 use crate::interpreter::environment::{Environment, EnvironmentRef};
-use crate::interpreter::error::RuntimeEvent;
+use crate::interpreter::error::{RuntimeError, RuntimeEvent};
 use crate::parser::ast::NodeId;
 use crate::parser::expr::{self, Binary, Expr, ExprNode};
 use crate::parser::stmt::{self, Stmt, StmtNode};
@@ -283,6 +283,47 @@ impl expr::Visitor for Interpreter {
         self.evaluate(&expr.expression)
     }
 
+    fn visit_call_expr(&mut self, expr: &expr::Call) -> Self::Output {
+        let Object::Function(callee) = self.evaluate(&expr.callee)? else {
+            return Err(RuntimeEvent::error(
+                expr.paren.clone(),
+                "Can only call functions and classes.",
+            ));
+        };
+
+        let args = expr
+            .arguments
+            .iter()
+            .map(|arg| self.evaluate(arg))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if args.len() != callee.arity() {
+            return Err(RuntimeEvent::error(
+                expr.paren.clone(),
+                format!(
+                    "Expected {} arguments but got {}.",
+                    callee.arity(),
+                    args.len()
+                ),
+            ));
+        }
+
+        callee.call(self, args.as_slice())
+    }
+
+    fn visit_get_expr(&mut self, expr: &expr::Get) -> Self::Output {
+        let obj = self.evaluate(&expr.object)?;
+
+        let Object::Instance(instance) = obj else {
+            return Err(RuntimeEvent::error(
+                expr.name.clone(),
+                "Only instances have properties.".to_owned(),
+            ));
+        };
+
+        instance.get(&expr.name)
+    }
+
     /// Evaluates unary operators such as logical negation and numeric negation.
     ///
     /// Returns an error when numeric negation is applied to a non-number.
@@ -329,6 +370,16 @@ impl expr::Visitor for Interpreter {
         };
 
         Ok(value)
+    }
+
+    fn visit_logical_expr(&mut self, expr: &expr::Logical) -> Self::Output {
+        let left = self.evaluate(&expr.left)?;
+
+        match expr.operator.typ {
+            TokenType::Or if left.is_truthy() => Ok(left),
+            TokenType::And if !left.is_truthy() => Ok(left),
+            _ => self.evaluate(&expr.right),
+        }
     }
 
     /// Evaluates binary operators including arithmetic, comparison, and equality.
@@ -397,44 +448,6 @@ impl expr::Visitor for Interpreter {
                 expr.operator.typ
             ),
         }
-    }
-
-    fn visit_logical_expr(&mut self, expr: &expr::Logical) -> Self::Output {
-        let left = self.evaluate(&expr.left)?;
-
-        match expr.operator.typ {
-            TokenType::Or if left.is_truthy() => Ok(left),
-            TokenType::And if !left.is_truthy() => Ok(left),
-            _ => self.evaluate(&expr.right),
-        }
-    }
-
-    fn visit_call_expr(&mut self, expr: &expr::Call) -> Self::Output {
-        let Object::Function(callee) = self.evaluate(&expr.callee)? else {
-            return Err(RuntimeEvent::error(
-                expr.paren.clone(),
-                "Can only call functions and classes.",
-            ));
-        };
-
-        let args = expr
-            .arguments
-            .iter()
-            .map(|arg| self.evaluate(arg))
-            .collect::<Result<Vec<_>, _>>()?;
-
-        if args.len() != callee.arity() {
-            return Err(RuntimeEvent::error(
-                expr.paren.clone(),
-                format!(
-                    "Expected {} arguments but got {}.",
-                    callee.arity(),
-                    args.len()
-                ),
-            ));
-        }
-
-        callee.call(self, args.as_slice())
     }
 }
 
