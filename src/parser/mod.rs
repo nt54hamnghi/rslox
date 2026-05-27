@@ -4,7 +4,7 @@ use std::vec;
 use crate::Value;
 use crate::error::StaticError;
 use crate::parser::ast::{Ast, Context};
-use crate::parser::expr::{ExprNode, Variable};
+use crate::parser::expr::{ExprNode, Get, Variable};
 use crate::parser::stmt::{Function, StmtNode};
 use crate::scanner::token::{Token, TokenType};
 
@@ -344,14 +344,16 @@ impl Parser {
         if let Some(equals) = self.next_if(TokenType::Equal) {
             let value = self.assignment()?;
 
-            let Some(variable) = expr.get::<Variable>() else {
+            if let Some(variable) = expr.get::<Variable>() {
+                expr = self.ctx.new_assign(variable.name, value);
+            } else if let Some(get) = expr.get::<Get>() {
+                expr = self.ctx.new_set(get.object, get.name, value);
+            } else {
                 return Err(StaticError::error_at_token(
                     &equals,
                     "Invalid assignment target.".into(),
                 ));
             };
-
-            expr = self.ctx.new_assign(variable.name, value);
         }
 
         Ok(expr)

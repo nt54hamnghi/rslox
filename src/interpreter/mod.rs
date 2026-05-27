@@ -9,7 +9,7 @@ use crate::interpreter::callable::function::LoxFunction;
 use crate::interpreter::callable::native::ClockNativeFunction;
 use crate::interpreter::class::LoxClass;
 use crate::interpreter::environment::{Environment, EnvironmentRef};
-use crate::interpreter::error::{RuntimeError, RuntimeEvent};
+use crate::interpreter::error::RuntimeEvent;
 use crate::parser::ast::NodeId;
 use crate::parser::expr::{self, Binary, Expr, ExprNode};
 use crate::parser::stmt::{self, Stmt, StmtNode};
@@ -46,18 +46,13 @@ pub struct Interpreter {
     locals: SecondaryMap<NodeId, usize>,
 }
 
-fn new_globals() -> Rc<RefCell<Environment>> {
-    let globals = Environment::from(HashMap::from([(
-        "clock".to_owned(),
-        Object::function(ClockNativeFunction),
-    )]));
-
-    Rc::new(RefCell::new(globals))
+fn builtins() -> HashMap<String, Object> {
+    HashMap::from([("clock".to_owned(), Object::function(ClockNativeFunction))])
 }
 
 impl Interpreter {
     pub fn new(locals: SecondaryMap<NodeId, usize>) -> Self {
-        let globals = new_globals();
+        let globals = Rc::new(RefCell::new(Environment::from(builtins())));
 
         Self {
             // the interpreter starts with the global environment
@@ -321,7 +316,42 @@ impl expr::Visitor for Interpreter {
             ));
         };
 
-        instance.get(&expr.name)
+        instance.borrow().get(&expr.name)
+    }
+
+    fn visit_set_expr(&mut self, expr: &expr::Set) -> Self::Output {
+        let obj = self.evaluate(&expr.object)?;
+        let Object::Instance(instance) = obj else {
+            return Err(RuntimeEvent::error(
+                expr.name.clone(),
+                "Only instances have fields.".to_owned(),
+            ));
+        };
+        let value = self.evaluate(&expr.value)?;
+        instance.borrow_mut().set(&expr.name, value.clone());
+        Ok(value)
+    }
+
+    fn visit_variable_expr(&mut self, expr: &expr::Variable) -> Self::Output {
+        self.lookup_variable(&expr.name, expr)
+    }
+
+    fn visit_assign_expr(&mut self, expr: &expr::Assign) -> Self::Output {
+        let value = self.evaluate(&expr.value)?;
+
+        match self.locals.get(expr.id()) {
+            Some(distance) => {
+                self.environment
+                    .borrow_mut()
+                    .assign_at(&expr.name, value.clone(), *distance);
+            }
+            None => self
+                .environment
+                .borrow_mut()
+                .assign(&expr.name, value.clone())?,
+        };
+
+        Ok(value)
     }
 
     /// Evaluates unary operators such as logical negation and numeric negation.
@@ -347,38 +377,6 @@ impl expr::Visitor for Interpreter {
                 "Unexpected token type for unary expression, found {:?}",
                 expr.operator.typ
             ),
-        }
-    }
-
-    fn visit_variable_expr(&mut self, expr: &expr::Variable) -> Self::Output {
-        self.lookup_variable(&expr.name, expr)
-    }
-
-    fn visit_assign_expr(&mut self, expr: &expr::Assign) -> Self::Output {
-        let value = self.evaluate(&expr.value)?;
-
-        match self.locals.get(expr.id()) {
-            Some(distance) => {
-                self.environment
-                    .borrow_mut()
-                    .assign_at(&expr.name, value.clone(), *distance);
-            }
-            None => self
-                .environment
-                .borrow_mut()
-                .assign(&expr.name, value.clone())?,
-        };
-
-        Ok(value)
-    }
-
-    fn visit_logical_expr(&mut self, expr: &expr::Logical) -> Self::Output {
-        let left = self.evaluate(&expr.left)?;
-
-        match expr.operator.typ {
-            TokenType::Or if left.is_truthy() => Ok(left),
-            TokenType::And if !left.is_truthy() => Ok(left),
-            _ => self.evaluate(&expr.right),
         }
     }
 
@@ -447,6 +445,16 @@ impl expr::Visitor for Interpreter {
                 "Unexpected token type for binary expression, found {:?}",
                 expr.operator.typ
             ),
+        }
+    }
+
+    fn visit_logical_expr(&mut self, expr: &expr::Logical) -> Self::Output {
+        let left = self.evaluate(&expr.left)?;
+
+        match expr.operator.typ {
+            TokenType::Or if left.is_truthy() => Ok(left),
+            TokenType::And if !left.is_truthy() => Ok(left),
+            _ => self.evaluate(&expr.right),
         }
     }
 }

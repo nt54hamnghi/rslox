@@ -13,11 +13,12 @@ pub trait Visitor {
     fn visit_grouping_expr(&mut self, expr: &Grouping) -> Self::Output;
     fn visit_call_expr(&mut self, expr: &Call) -> Self::Output;
     fn visit_get_expr(&mut self, expr: &Get) -> Self::Output;
-    fn visit_unary_expr(&mut self, expr: &Unary) -> Self::Output;
+    fn visit_set_expr(&mut self, expr: &Set) -> Self::Output;
     fn visit_variable_expr(&mut self, expr: &Variable) -> Self::Output;
     fn visit_assign_expr(&mut self, expr: &Assign) -> Self::Output;
-    fn visit_logical_expr(&mut self, expr: &Logical) -> Self::Output;
+    fn visit_unary_expr(&mut self, expr: &Unary) -> Self::Output;
     fn visit_binary_expr(&mut self, expr: &Binary) -> Self::Output;
+    fn visit_logical_expr(&mut self, expr: &Logical) -> Self::Output;
 }
 
 impl Context {
@@ -63,6 +64,27 @@ impl Context {
             ctx: self,
             id,
             kind: ExprKind::Get,
+        }
+    }
+
+    pub(super) fn new_set(
+        &'static self,
+        object: ExprNode,
+        name: Token,
+        value: ExprNode,
+    ) -> ExprNode {
+        let id = self.nodes.borrow_mut().insert_with_key(|id| {
+            Box::new(Set {
+                id,
+                object,
+                name,
+                value,
+            })
+        });
+        ExprNode {
+            ctx: self,
+            id,
+            kind: ExprKind::Set,
         }
     }
 
@@ -191,15 +213,16 @@ impl Expr for ExprNode {
         match &self.kind {
             // unwrap is safe here because we know the kind
             // (nodes are only created with Context, so their kind is always correct)
-            ExprKind::Grouping => self.get::<Grouping>().unwrap().accept(visitor),
-            ExprKind::Binary => self.get::<Binary>().unwrap().accept(visitor),
-            ExprKind::Unary => self.get::<Unary>().unwrap().accept(visitor),
             ExprKind::Literal => self.get::<Literal>().unwrap().accept(visitor),
-            ExprKind::Variable => self.get::<Variable>().unwrap().accept(visitor),
-            ExprKind::Assign => self.get::<Assign>().unwrap().accept(visitor),
-            ExprKind::Logical => self.get::<Logical>().unwrap().accept(visitor),
+            ExprKind::Grouping => self.get::<Grouping>().unwrap().accept(visitor),
             ExprKind::Call => self.get::<Call>().unwrap().accept(visitor),
             ExprKind::Get => self.get::<Get>().unwrap().accept(visitor),
+            ExprKind::Set => self.get::<Set>().unwrap().accept(visitor),
+            ExprKind::Variable => self.get::<Variable>().unwrap().accept(visitor),
+            ExprKind::Assign => self.get::<Assign>().unwrap().accept(visitor),
+            ExprKind::Unary => self.get::<Unary>().unwrap().accept(visitor),
+            ExprKind::Binary => self.get::<Binary>().unwrap().accept(visitor),
+            ExprKind::Logical => self.get::<Logical>().unwrap().accept(visitor),
         }
     }
 
@@ -210,15 +233,16 @@ impl Expr for ExprNode {
 
 #[derive(Debug, Clone, Copy)]
 pub enum ExprKind {
+    Literal,
     Grouping,
     Call,
     Get,
-    Binary,
-    Logical,
-    Unary,
+    Set,
     Variable,
     Assign,
-    Literal,
+    Unary,
+    Binary,
+    Logical,
 }
 
 #[derive(Debug, Clone)]
@@ -265,6 +289,24 @@ pub struct Get {
 impl Expr for Get {
     fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_get_expr(self)
+    }
+
+    fn id(&self) -> NodeId {
+        self.id
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Set {
+    id: NodeId,
+    pub object: ExprNode,
+    pub name: Token,
+    pub value: ExprNode,
+}
+
+impl Expr for Set {
+    fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
+        visitor.visit_set_expr(self)
     }
 
     fn id(&self) -> NodeId {

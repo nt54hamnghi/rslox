@@ -41,11 +41,8 @@ impl Visitor for AstPrinter {
         todo!()
     }
 
-    fn visit_unary_expr(&mut self, expr: &Unary) -> Self::Output {
-        let Unary {
-            operator, right, ..
-        } = expr;
-        parenthesize!(self, operator.lexeme, right)
+    fn visit_set_expr(&mut self, _expr: &super::expr::Set) -> Self::Output {
+        todo!()
     }
 
     fn visit_variable_expr(&mut self, _expr: &super::expr::Variable) -> Self::Output {
@@ -56,8 +53,11 @@ impl Visitor for AstPrinter {
         todo!()
     }
 
-    fn visit_logical_expr(&mut self, _expr: &super::expr::Logical) -> Self::Output {
-        todo!()
+    fn visit_unary_expr(&mut self, expr: &Unary) -> Self::Output {
+        let Unary {
+            operator, right, ..
+        } = expr;
+        parenthesize!(self, operator.lexeme, right)
     }
 
     fn visit_binary_expr(&mut self, expr: &Binary) -> Self::Output {
@@ -68,5 +68,9 @@ impl Visitor for AstPrinter {
             ..
         } = expr;
         parenthesize!(self, operator.lexeme, left, right)
+    }
+
+    fn visit_logical_expr(&mut self, _expr: &super::expr::Logical) -> Self::Output {
+        todo!()
     }
 }

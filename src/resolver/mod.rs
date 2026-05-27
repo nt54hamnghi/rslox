@@ -224,8 +224,9 @@ impl expr::Visitor for Resolver {
         self.resolve_expression(expr.object)
     }
 
-    fn visit_unary_expr(&mut self, expr: &expr::Unary) -> Self::Output {
-        self.resolve_expression(expr.right)
+    fn visit_set_expr(&mut self, expr: &expr::Set) -> Self::Output {
+        self.resolve_expression(expr.value)?;
+        self.resolve_expression(expr.object)
     }
 
     fn visit_variable_expr(&mut self, expr: &expr::Variable) -> Self::Output {
@@ -251,13 +252,17 @@ impl expr::Visitor for Resolver {
         Ok(())
     }
 
-    fn visit_logical_expr(&mut self, expr: &expr::Logical) -> Self::Output {
+    fn visit_unary_expr(&mut self, expr: &expr::Unary) -> Self::Output {
+        self.resolve_expression(expr.right)
+    }
+
+    fn visit_binary_expr(&mut self, expr: &expr::Binary) -> Self::Output {
         self.resolve_expression(expr.left)?;
         self.resolve_expression(expr.right)?;
         Ok(())
     }
 
-    fn visit_binary_expr(&mut self, expr: &expr::Binary) -> Self::Output {
+    fn visit_logical_expr(&mut self, expr: &expr::Logical) -> Self::Output {
         self.resolve_expression(expr.left)?;
         self.resolve_expression(expr.right)?;
         Ok(())

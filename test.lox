@@ -1,4 +1,5 @@
 class Bagel {}
-
 print Bagel;
-print Bagel();
+var item = Bagel();
+item.price = 10.0;
+print item.price;

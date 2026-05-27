@@ -20,12 +20,16 @@ impl LoxClass {
 }
 
 impl Callable for Rc<LoxClass> {
-    fn call(&self, interpreter: &mut Interpreter, args: &[Object]) -> Result<Object, RuntimeEvent> {
+    fn call(
+        &self,
+        _interpreter: &mut Interpreter,
+        _args: &[Object],
+    ) -> Result<Object, RuntimeEvent> {
         let instance = LoxInstance {
             class: Rc::clone(&self),
             fields: HashMap::new(),
         };
-        Ok(Object::Instance(instance))
+        Ok(Object::instance(instance))
     }
 
     fn arity(&self) -> usize {
@@ -54,6 +58,10 @@ impl LoxInstance {
                 name.clone(),
                 format!("Undefined property '{}'.", name.lexeme),
             ))
+    }
+
+    pub fn set(&mut self, name: &Token, value: Object) {
+        self.fields.insert(name.lexeme.to_owned(), value);
     }
 }
 
