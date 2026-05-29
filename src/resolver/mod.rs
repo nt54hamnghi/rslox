@@ -16,24 +16,29 @@ enum FunctionType {
     Method,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum ClassType {
+    #[default]
+    None,
+    Class,
+}
+
 /// A map of variable names to their resolved state.
 /// The boolean value indicates whether the variable's
 /// initializer has been resolved.
 type Scope = HashMap<String, bool>;
 
+#[derive(Debug, Default)]
 pub struct Resolver {
     bindings: SecondaryMap<NodeId, usize>,
     scopes: Vec<Scope>,
     current_function: FunctionType,
+    current_class: ClassType,
 }
 
 impl Resolver {
     pub fn new() -> Self {
-        Self {
-            bindings: SecondaryMap::new(),
-            scopes: Vec::new(),
-            current_function: FunctionType::default(),
-        }
+        Self::default()
     }
 
     pub fn resolve(
@@ -79,25 +84,45 @@ impl Resolver {
         fun: &stmt::Function,
         typ: FunctionType,
     ) -> Result<(), StaticError> {
-        self.with_function(typ, |this| {
-            this.begin_scope();
-            for param in fun.parameters.iter() {
-                this.declare(param)?;
-                this.define(param);
-            }
-            this.resolve_body(&fun.body)?;
-            this.end_scope();
-            Ok(())
+        self.with_function_context(typ, |this| {
+            this.with_new_scope(|this| {
+                for param in fun.parameters.iter() {
+                    this.declare(param)?;
+                    this.define(param);
+                }
+                this.resolve_body(&fun.body)?;
+                Ok(())
+            })
         })
     }
 
-    fn with_function<F>(self: &mut Self, typ: FunctionType, op: F) -> Result<(), StaticError>
+    fn with_function_context<F, R>(&mut self, typ: FunctionType, op: F) -> Result<R, StaticError>
     where
-        F: FnOnce(&mut Self) -> Result<(), StaticError>,
+        F: FnOnce(&mut Self) -> Result<R, StaticError>,
     {
         let enclosing = std::mem::replace(&mut self.current_function, typ);
         let result = op(self);
         self.current_function = enclosing;
+        result
+    }
+
+    fn with_class_context<F, R>(&mut self, typ: ClassType, op: F) -> Result<R, StaticError>
+    where
+        F: FnOnce(&mut Self) -> Result<R, StaticError>,
+    {
+        let enclosing = std::mem::replace(&mut self.current_class, typ);
+        let result = op(self);
+        self.current_class = enclosing;
+        result
+    }
+
+    fn with_new_scope<F, R>(&mut self, op: F) -> Result<R, StaticError>
+    where
+        F: FnOnce(&mut Self) -> Result<R, StaticError>,
+    {
+        self.begin_scope();
+        let result = op(self);
+        self.end_scope();
         result
     }
 
@@ -189,27 +214,27 @@ impl stmt::Visitor for Resolver {
     }
 
     fn visit_block_stmt(&mut self, stmt: &stmt::Block) -> Self::Output {
-        self.begin_scope();
-        self.resolve_body(&stmt.statements)?;
-        self.end_scope();
-        Ok(())
+        self.with_new_scope(|this| {
+            this.resolve_body(&stmt.statements)?;
+            Ok(())
+        })
     }
 
     fn visit_class_stmt(&mut self, stmt: &stmt::Class) -> Self::Output {
-        self.declare(&stmt.name)?;
-        self.define(&stmt.name);
-
-        self.begin_scope();
-        self.scopes
-            .last_mut()
-            .unwrap()
-            .insert("this".to_owned(), true);
-        for method in &stmt.methods {
-            self.resolve_function(method, FunctionType::Method)?;
-        }
-        self.end_scope();
-
-        Ok(())
+        self.with_class_context(ClassType::Class, |this| {
+            this.declare(&stmt.name)?;
+            this.define(&stmt.name);
+            this.with_new_scope(|this| {
+                this.scopes
+                    .last_mut()
+                    .unwrap()
+                    .insert("this".to_owned(), true);
+                for method in &stmt.methods {
+                    this.resolve_function(method, FunctionType::Method)?;
+                }
+                Ok(())
+            })
+        })
     }
 }
 
@@ -242,6 +267,12 @@ impl expr::Visitor for Resolver {
     }
 
     fn visit_this_expr(&mut self, expr: &expr::This) -> Self::Output {
+        if self.current_class == ClassType::None {
+            return Err(StaticError::error_at_token(
+                &expr.keyword,
+                "Can't use 'this' outside of a class.",
+            ));
+        }
         self.resolve_local(expr, &expr.keyword);
         Ok(())
     }
