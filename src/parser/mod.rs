@@ -517,6 +517,10 @@ impl Parser {
             return Ok(self.ctx.new_grouping(expr));
         }
 
+        if let Some(this) = self.next_if(TokenType::This) {
+            return Ok(self.ctx.new_this(this));
+        }
+
         if let Some(name) = self.next_if(TokenType::Identifier) {
             return Ok(self.ctx.new_variable(name));
         }

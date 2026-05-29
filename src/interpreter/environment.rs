@@ -32,9 +32,14 @@ impl Environment {
         }
     }
 
-    /// Defines a new variable in the environment by inserting the key-value pair.
+    /// Defines a new variable in the environment by inserting the given name and value.
+    pub fn define_name(&mut self, name: impl Into<String>, value: Object) {
+        self.values.insert(name.into(), value);
+    }
+
+    /// Defines a new variable in the environment using the lexeme of the given [`Token`] as the key.
     pub fn define(&mut self, key: &Token, value: Object) {
-        self.values.insert(key.lexeme.clone(), value);
+        self.define_name(&key.lexeme, value);
     }
 
     /// Retrieves the value of a variable in this environment,

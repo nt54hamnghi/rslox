@@ -5,17 +5,23 @@ use std::rc::Rc;
 use crate::Object;
 use crate::interpreter::Interpreter;
 use crate::interpreter::callable::Callable;
+use crate::interpreter::callable::function::LoxFunction;
 use crate::interpreter::error::RuntimeEvent;
 use crate::scanner::token::Token;
 
 #[derive(Debug, Clone)]
 pub struct LoxClass {
     name: String,
+    methods: HashMap<String, LoxFunction>,
 }
 
 impl LoxClass {
-    pub fn new(name: String) -> Self {
-        Self { name }
+    pub fn new(name: String, methods: HashMap<String, LoxFunction>) -> Self {
+        Self { name, methods }
+    }
+
+    pub fn find_method(&self, name: impl AsRef<str>) -> Option<&LoxFunction> {
+        self.methods.get(name.as_ref())
     }
 }
 
@@ -51,13 +57,19 @@ pub struct LoxInstance {
 
 impl LoxInstance {
     pub fn get(&self, name: &Token) -> Result<Object, RuntimeEvent> {
-        self.fields
-            .get(&name.lexeme)
-            .cloned()
-            .ok_or(RuntimeEvent::error(
-                name.clone(),
-                format!("Undefined property '{}'.", name.lexeme),
-            ))
+        if let Some(obj) = self.fields.get(&name.lexeme).cloned() {
+            return Ok(obj);
+        }
+
+        if let Some(method) = self.class.find_method(&name.lexeme).cloned() {
+            let method = method.bind(self.clone());
+            return Ok(Object::function(method));
+        }
+
+        Err(RuntimeEvent::error(
+            name.clone(),
+            format!("Undefined property '{}'.", name.lexeme),
+        ))
     }
 
     pub fn set(&mut self, name: &Token, value: Object) {

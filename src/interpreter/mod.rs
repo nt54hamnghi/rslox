@@ -127,7 +127,7 @@ impl stmt::Visitor for Interpreter {
     }
 
     fn visit_function_stmt(&mut self, stmt: &stmt::Function) -> Self::Output {
-        let f = LoxFunction::new(stmt.clone(), self.environment.clone());
+        let f = LoxFunction::new(stmt.clone(), Rc::clone(&self.environment));
         self.environment
             .borrow_mut()
             .define(&stmt.name, Object::function(f));
@@ -174,7 +174,13 @@ impl stmt::Visitor for Interpreter {
             .borrow_mut()
             .define(&stmt.name, Object::nil());
 
-        let class = LoxClass::new(stmt.name.lexeme.to_owned());
+        let mut methods = HashMap::with_capacity(stmt.methods.len());
+        for m in &stmt.methods {
+            let f = LoxFunction::new(m.clone(), Rc::clone(&self.environment));
+            methods.insert(m.name.lexeme.clone(), f);
+        }
+
+        let class = LoxClass::new(stmt.name.lexeme.to_owned(), methods);
 
         self.environment
             .borrow_mut()
@@ -286,22 +292,22 @@ impl expr::Visitor for Interpreter {
             ));
         };
 
-        let args = expr
-            .arguments
-            .iter()
-            .map(|arg| self.evaluate(arg))
-            .collect::<Result<Vec<_>, _>>()?;
-
-        if args.len() != callee.arity() {
+        if expr.arguments.len() != callee.arity() {
             return Err(RuntimeEvent::error(
                 expr.paren.clone(),
                 format!(
                     "Expected {} arguments but got {}.",
                     callee.arity(),
-                    args.len()
+                    expr.arguments.len()
                 ),
             ));
         }
+
+        let args = expr
+            .arguments
+            .iter()
+            .map(|arg| self.evaluate(arg))
+            .collect::<Result<Vec<_>, _>>()?;
 
         callee.call(self, args.as_slice())
     }
@@ -330,6 +336,10 @@ impl expr::Visitor for Interpreter {
         let value = self.evaluate(&expr.value)?;
         instance.borrow_mut().set(&expr.name, value.clone());
         Ok(value)
+    }
+
+    fn visit_this_expr(&mut self, expr: &expr::This) -> Self::Output {
+        self.lookup_variable(&expr.keyword, expr)
     }
 
     fn visit_variable_expr(&mut self, expr: &expr::Variable) -> Self::Output {

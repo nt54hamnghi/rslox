@@ -14,6 +14,7 @@ pub trait Visitor {
     fn visit_call_expr(&mut self, expr: &Call) -> Self::Output;
     fn visit_get_expr(&mut self, expr: &Get) -> Self::Output;
     fn visit_set_expr(&mut self, expr: &Set) -> Self::Output;
+    fn visit_this_expr(&mut self, expr: &This) -> Self::Output;
     fn visit_variable_expr(&mut self, expr: &Variable) -> Self::Output;
     fn visit_assign_expr(&mut self, expr: &Assign) -> Self::Output;
     fn visit_unary_expr(&mut self, expr: &Unary) -> Self::Output;
@@ -85,6 +86,18 @@ impl Context {
             ctx: self,
             id,
             kind: ExprKind::Set,
+        }
+    }
+
+    pub(super) fn new_this(&'static self, keyword: Token) -> ExprNode {
+        let id = self
+            .nodes
+            .borrow_mut()
+            .insert_with_key(|id| Box::new(This { id, keyword }));
+        ExprNode {
+            ctx: self,
+            id,
+            kind: ExprKind::This,
         }
     }
 
@@ -218,6 +231,7 @@ impl Expr for ExprNode {
             ExprKind::Call => self.get::<Call>().unwrap().accept(visitor),
             ExprKind::Get => self.get::<Get>().unwrap().accept(visitor),
             ExprKind::Set => self.get::<Set>().unwrap().accept(visitor),
+            ExprKind::This => self.get::<This>().unwrap().accept(visitor),
             ExprKind::Variable => self.get::<Variable>().unwrap().accept(visitor),
             ExprKind::Assign => self.get::<Assign>().unwrap().accept(visitor),
             ExprKind::Unary => self.get::<Unary>().unwrap().accept(visitor),
@@ -238,6 +252,7 @@ pub enum ExprKind {
     Call,
     Get,
     Set,
+    This,
     Variable,
     Assign,
     Unary,
@@ -307,6 +322,22 @@ pub struct Set {
 impl Expr for Set {
     fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
         visitor.visit_set_expr(self)
+    }
+
+    fn id(&self) -> NodeId {
+        self.id
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct This {
+    id: NodeId,
+    pub keyword: Token,
+}
+
+impl Expr for This {
+    fn accept<V: Visitor>(&self, visitor: &mut V) -> V::Output {
+        visitor.visit_this_expr(self)
     }
 
     fn id(&self) -> NodeId {

@@ -13,6 +13,7 @@ enum FunctionType {
     #[default]
     None,
     Function,
+    Method,
 }
 
 /// A map of variable names to their resolved state.
@@ -197,6 +198,17 @@ impl stmt::Visitor for Resolver {
     fn visit_class_stmt(&mut self, stmt: &stmt::Class) -> Self::Output {
         self.declare(&stmt.name)?;
         self.define(&stmt.name);
+
+        self.begin_scope();
+        self.scopes
+            .last_mut()
+            .unwrap()
+            .insert("this".to_owned(), true);
+        for method in &stmt.methods {
+            self.resolve_function(method, FunctionType::Method)?;
+        }
+        self.end_scope();
+
         Ok(())
     }
 }
@@ -227,6 +239,11 @@ impl expr::Visitor for Resolver {
     fn visit_set_expr(&mut self, expr: &expr::Set) -> Self::Output {
         self.resolve_expression(expr.value)?;
         self.resolve_expression(expr.object)
+    }
+
+    fn visit_this_expr(&mut self, expr: &expr::This) -> Self::Output {
+        self.resolve_local(expr, &expr.keyword);
+        Ok(())
     }
 
     fn visit_variable_expr(&mut self, expr: &expr::Variable) -> Self::Output {

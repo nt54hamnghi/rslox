@@ -1,6 +1,9 @@
+use std::cell::RefCell;
 use std::fmt::Display;
+use std::rc::Rc;
 
 use crate::interpreter::callable::Callable;
+use crate::interpreter::class::LoxInstance;
 use crate::interpreter::error::RuntimeEvent;
 use crate::interpreter::{Environment, EnvironmentRef, Interpreter};
 use crate::parser::stmt::Function;
@@ -18,6 +21,12 @@ impl LoxFunction {
             declaration,
             closure,
         }
+    }
+
+    pub fn bind(self, instance: LoxInstance) -> Self {
+        let mut env = Environment::with_enclosing(self.closure);
+        env.define_name("this", Object::instance(instance));
+        Self::new(self.declaration, Rc::new(RefCell::new(env)))
     }
 }
 
