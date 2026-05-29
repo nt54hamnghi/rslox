@@ -223,7 +223,7 @@ impl<'src> TokenStream<'src> {
 
         // reached the end of the input without finding a closing quote
         if self.chars.peek().is_none() {
-            let report = StaticError::error_at_line(self.line, "Unterminated string.".into());
+            let report = StaticError::error_at_line(self.line, "Unterminated string.");
             return Err(report);
         } else {
             // consume the closing quote

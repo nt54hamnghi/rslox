@@ -312,7 +312,7 @@ impl expr::Visitor for Interpreter {
         let Object::Instance(instance) = obj else {
             return Err(RuntimeEvent::error(
                 expr.name.clone(),
-                "Only instances have properties.".to_owned(),
+                "Only instances have properties.",
             ));
         };
 
@@ -324,7 +324,7 @@ impl expr::Visitor for Interpreter {
         let Object::Instance(instance) = obj else {
             return Err(RuntimeEvent::error(
                 expr.name.clone(),
-                "Only instances have fields.".to_owned(),
+                "Only instances have fields.",
             ));
         };
         let value = self.evaluate(&expr.value)?;

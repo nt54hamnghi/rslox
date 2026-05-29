@@ -52,8 +52,10 @@ impl Environment {
             return enclosing.borrow().get(token);
         }
 
-        let msg = format!("Undefined variable '{}'.", var_name);
-        Err(RuntimeEvent::error(token.clone(), msg))
+        Err(RuntimeEvent::error(
+            token.clone(),
+            format!("Undefined variable '{}'.", var_name),
+        ))
     }
 
     /// Retrieves a variable from the environment exactly `distance` scopes away.
@@ -93,8 +95,10 @@ impl Environment {
             return enclosing.borrow_mut().assign(token, value);
         }
 
-        let msg = format!("Undefined variable '{}'.", var_name);
-        Err(RuntimeEvent::error(token.clone(), msg))
+        Err(RuntimeEvent::error(
+            token.clone(),
+            format!("Undefined variable '{}'.", var_name),
+        ))
     }
 
     /// Assigns a variable in the environment exactly `distance` scopes away.

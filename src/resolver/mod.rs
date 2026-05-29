@@ -116,7 +116,7 @@ impl Resolver {
         if current.contains_key(&name.lexeme) {
             return Err(StaticError::error_at_token(
                 name,
-                "Already a variable with this name in this scope.".to_owned(),
+                "Already a variable with this name in this scope.",
             ));
         }
 
@@ -163,7 +163,7 @@ impl stmt::Visitor for Resolver {
         if self.current_function == FunctionType::None {
             return Err(StaticError::error_at_token(
                 &stmt.keyword,
-                "Can't return from top-level code.".to_owned(),
+                "Can't return from top-level code.",
             ));
         }
         if let Some(value) = stmt.value {
@@ -238,7 +238,7 @@ impl expr::Visitor for Resolver {
         {
             return Err(StaticError::error_at_token(
                 &expr.name,
-                "Can't read local variable in its own initializer.".to_owned(),
+                "Can't read local variable in its own initializer.",
             ));
         }
 

@@ -13,16 +13,16 @@ pub struct StaticError {
 
 impl StaticError {
     /// Creates a static error tied to a specific source line without token context.
-    pub fn error_at_line(line: u32, message: String) -> Self {
+    pub fn error_at_line(line: u32, message: impl Into<String>) -> Self {
         Self {
             line,
             location: None,
-            message,
+            message: message.into(),
         }
     }
 
     /// Creates a static error at a specific token location.
-    pub fn error_at_token(token: &Token, message: String) -> Self {
+    pub fn error_at_token(token: &Token, message: impl Into<String>) -> Self {
         let location = if token.typ == TokenType::Eof {
             " at end".into()
         } else {
@@ -32,7 +32,7 @@ impl StaticError {
         Self {
             line: token.line,
             location: Some(location),
-            message,
+            message: message.into(),
         }
     }
 }

@@ -157,7 +157,7 @@ impl Parser {
         if !self.peek_check(TokenType::RightParen) {
             loop {
                 if parameters.len() >= MAX_PARAMETER_COUNT {
-                    let error = self.error("Can't have more than 255 parameters.".into());
+                    let error = self.error("Can't have more than 255 parameters.");
                     eprintln!("{error}");
                 }
                 let param = self.next_ok(TokenType::Identifier, "Expect parameter name.".into())?;
@@ -351,7 +351,7 @@ impl Parser {
             } else {
                 return Err(StaticError::error_at_token(
                     &equals,
-                    "Invalid assignment target.".into(),
+                    "Invalid assignment target.",
                 ));
             };
         }
@@ -473,7 +473,7 @@ impl Parser {
         if !self.peek_check(TokenType::RightParen) {
             loop {
                 if args.len() >= MAX_ARGUMENT_COUNT {
-                    let error = self.error("Can't have more than 255 arguments.".into());
+                    let error = self.error("Can't have more than 255 arguments.");
                     eprintln!("{error}");
                 }
 
@@ -521,7 +521,7 @@ impl Parser {
             return Ok(self.ctx.new_variable(name));
         }
 
-        Err(self.error("Expect expression".into()))
+        Err(self.error("Expect expression"))
     }
 
     /// Consumes the next token if it matches any of the given types.
@@ -589,7 +589,7 @@ impl Parser {
         self.tokens.peek().is_none_or(|t| t.typ == TokenType::Eof)
     }
 
-    fn error(&mut self, message: String) -> StaticError {
+    fn error(&mut self, message: impl Into<String>) -> StaticError {
         let token = self.tokens.peek().expect("expected a token");
         StaticError::error_at_token(token, message)
     }
