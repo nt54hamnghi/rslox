@@ -1,9 +1,7 @@
-use std::cell::RefCell;
 use std::fmt::{Debug, Display};
-use std::rc::Rc;
 
 use crate::interpreter::callable::Callable;
-use crate::interpreter::class::LoxInstance;
+use crate::interpreter::class::InstanceRef;
 
 pub mod cli;
 pub mod error;
@@ -16,16 +14,12 @@ pub mod scanner;
 pub enum Object {
     Primitive(Value),
     Function(Box<dyn Callable>),
-    Instance(Rc<RefCell<LoxInstance>>),
+    Instance(InstanceRef),
 }
 
 impl Object {
     pub fn function<T: Callable + 'static>(fun: T) -> Self {
         Object::Function(Box::new(fun))
-    }
-
-    pub fn instance(instance: LoxInstance) -> Self {
-        Object::Instance(Rc::new(RefCell::new(instance)))
     }
 
     pub fn nil() -> Self {

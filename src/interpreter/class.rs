@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::rc::Rc;
@@ -11,8 +12,9 @@ use crate::scanner::token::Token;
 
 #[derive(Debug, Clone)]
 pub struct LoxClass {
-    name: String,
-    methods: HashMap<String, LoxFunction>,
+    // TODO: remove pub
+    pub name: String,
+    pub methods: HashMap<String, LoxFunction>,
 }
 
 impl LoxClass {
@@ -26,20 +28,25 @@ impl LoxClass {
 }
 
 impl Callable for Rc<LoxClass> {
-    fn call(
-        &self,
-        _interpreter: &mut Interpreter,
-        _args: &[Object],
-    ) -> Result<Object, RuntimeEvent> {
-        let instance = LoxInstance {
+    fn call(&self, interpreter: &mut Interpreter, args: &[Object]) -> Result<Object, RuntimeEvent> {
+        let mut instance = Rc::new(RefCell::new(LoxInstance {
             class: Rc::clone(&self),
             fields: HashMap::new(),
+        }));
+
+        if let Some(init) = self.find_method("init").cloned() {
+            let obj = init.bind(instance).call(interpreter, args)?;
+            match obj {
+                Object::Instance(new) => instance = new,
+                _ => unreachable!(),
+            };
         };
-        Ok(Object::instance(instance))
+
+        Ok(Object::Instance(instance))
     }
 
     fn arity(&self) -> usize {
-        0
+        self.find_method("init").map(Callable::arity).unwrap_or(0)
     }
 }
 
@@ -51,18 +58,22 @@ impl Display for LoxClass {
 
 #[derive(Debug, Clone)]
 pub struct LoxInstance {
-    class: Rc<LoxClass>,
-    fields: HashMap<String, Object>,
+    // TODO: remove pub
+    pub class: Rc<LoxClass>,
+    pub fields: HashMap<String, Object>,
 }
 
+pub type InstanceRef = Rc<RefCell<LoxInstance>>;
+
 impl LoxInstance {
-    pub fn get(&self, name: &Token) -> Result<Object, RuntimeEvent> {
-        if let Some(obj) = self.fields.get(&name.lexeme).cloned() {
+    pub fn get(this: InstanceRef, name: &Token) -> Result<Object, RuntimeEvent> {
+        if let Some(obj) = this.borrow().fields.get(&name.lexeme).cloned() {
             return Ok(obj);
         }
 
-        if let Some(method) = self.class.find_method(&name.lexeme).cloned() {
-            let method = method.bind(self.clone());
+        let method = this.borrow().class.find_method(&name.lexeme).cloned();
+        if let Some(method) = method {
+            let method = method.bind(this);
             return Ok(Object::function(method));
         }
 
@@ -72,8 +83,10 @@ impl LoxInstance {
         ))
     }
 
-    pub fn set(&mut self, name: &Token, value: Object) {
-        self.fields.insert(name.lexeme.to_owned(), value);
+    pub fn set(this: InstanceRef, name: &Token, value: Object) {
+        this.borrow_mut()
+            .fields
+            .insert(name.lexeme.to_owned(), value);
     }
 }
 

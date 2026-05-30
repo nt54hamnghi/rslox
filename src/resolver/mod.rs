@@ -14,6 +14,7 @@ enum FunctionType {
     None,
     Function,
     Method,
+    Initializer,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -193,6 +194,12 @@ impl stmt::Visitor for Resolver {
             ));
         }
         if let Some(value) = stmt.value {
+            if self.current_function == FunctionType::Initializer {
+                return Err(StaticError::error_at_token(
+                    &stmt.keyword,
+                    "Can't return a value from an initializer.",
+                ));
+            }
             self.resolve_expression(value)?;
         }
         Ok(())
@@ -230,7 +237,11 @@ impl stmt::Visitor for Resolver {
                     .unwrap()
                     .insert("this".to_owned(), true);
                 for method in &stmt.methods {
-                    this.resolve_function(method, FunctionType::Method)?;
+                    let mut typ = FunctionType::Method;
+                    if method.name.lexeme == "init" {
+                        typ = FunctionType::Initializer;
+                    }
+                    this.resolve_function(method, typ)?;
                 }
                 Ok(())
             })

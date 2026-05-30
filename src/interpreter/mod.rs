@@ -7,7 +7,7 @@ use slotmap::SecondaryMap;
 
 use crate::interpreter::callable::function::LoxFunction;
 use crate::interpreter::callable::native::ClockNativeFunction;
-use crate::interpreter::class::LoxClass;
+use crate::interpreter::class::{LoxClass, LoxInstance};
 use crate::interpreter::environment::{Environment, EnvironmentRef};
 use crate::interpreter::error::RuntimeEvent;
 use crate::parser::ast::NodeId;
@@ -92,7 +92,11 @@ impl Interpreter {
                 // unwrap is safe here as the resolved distance exists for the variable in the locals map,
                 // which is from the bindings provided by the resolver walking the AST and resolving variables.
                 // It's a bug if the resolver fails to do so correctly.
-                let value = self.environment.borrow().get_at(name, *distance).unwrap();
+                let value = self
+                    .environment
+                    .borrow()
+                    .get_at(&name.lexeme, *distance)
+                    .unwrap();
                 Ok(value)
             }
             None => self.globals.borrow().get(name),
@@ -121,16 +125,18 @@ impl stmt::Visitor for Interpreter {
             .transpose()?
             .unwrap_or(Object::Primitive(Value::Nil));
 
-        self.environment.borrow_mut().define(&stmt.name, value);
+        self.environment
+            .borrow_mut()
+            .define(&stmt.name.lexeme, value);
 
         Ok(())
     }
 
     fn visit_function_stmt(&mut self, stmt: &stmt::Function) -> Self::Output {
-        let f = LoxFunction::new(stmt.clone(), Rc::clone(&self.environment));
+        let f = LoxFunction::new_function(stmt.clone(), Rc::clone(&self.environment));
         self.environment
             .borrow_mut()
-            .define(&stmt.name, Object::function(f));
+            .define(&stmt.name.lexeme, Object::function(f));
         Ok(())
     }
 
@@ -172,11 +178,11 @@ impl stmt::Visitor for Interpreter {
     fn visit_class_stmt(&mut self, stmt: &stmt::Class) -> Self::Output {
         self.environment
             .borrow_mut()
-            .define(&stmt.name, Object::nil());
+            .define(&stmt.name.lexeme, Object::nil());
 
         let mut methods = HashMap::with_capacity(stmt.methods.len());
         for m in &stmt.methods {
-            let f = LoxFunction::new(m.clone(), Rc::clone(&self.environment));
+            let f = LoxFunction::new_method(m.clone(), Rc::clone(&self.environment));
             methods.insert(m.name.lexeme.clone(), f);
         }
 
@@ -322,7 +328,7 @@ impl expr::Visitor for Interpreter {
             ));
         };
 
-        instance.borrow().get(&expr.name)
+        LoxInstance::get(instance, &expr.name)
     }
 
     fn visit_set_expr(&mut self, expr: &expr::Set) -> Self::Output {
@@ -334,7 +340,7 @@ impl expr::Visitor for Interpreter {
             ));
         };
         let value = self.evaluate(&expr.value)?;
-        instance.borrow_mut().set(&expr.name, value.clone());
+        LoxInstance::set(instance, &expr.name, value.clone());
         Ok(value)
     }
 
@@ -351,9 +357,11 @@ impl expr::Visitor for Interpreter {
 
         match self.locals.get(expr.id()) {
             Some(distance) => {
-                self.environment
-                    .borrow_mut()
-                    .assign_at(&expr.name, value.clone(), *distance);
+                self.environment.borrow_mut().assign_at(
+                    &expr.name.lexeme,
+                    value.clone(),
+                    *distance,
+                );
             }
             None => self
                 .environment

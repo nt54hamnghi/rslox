@@ -33,13 +33,8 @@ impl Environment {
     }
 
     /// Defines a new variable in the environment by inserting the given name and value.
-    pub fn define_name(&mut self, name: impl Into<String>, value: Object) {
+    pub fn define(&mut self, name: impl Into<String>, value: Object) {
         self.values.insert(name.into(), value);
-    }
-
-    /// Defines a new variable in the environment using the lexeme of the given [`Token`] as the key.
-    pub fn define(&mut self, key: &Token, value: Object) {
-        self.define_name(&key.lexeme, value);
     }
 
     /// Retrieves the value of a variable in this environment,
@@ -73,15 +68,16 @@ impl Environment {
     /// # Panic
     ///
     /// Panics if `distance` requires walking past the outermost environment.
-    pub fn get_at(&self, token: &Token, distance: usize) -> Option<Object> {
+    pub fn get_at(&self, name: impl AsRef<str>, distance: usize) -> Option<Object> {
+        let name = name.as_ref();
         if distance == 0 {
-            return self.values.get(&token.lexeme).cloned();
+            return self.values.get(name).cloned();
         }
         self.enclosing
             .as_ref()
             .unwrap()
             .borrow()
-            .get_at(token, distance - 1)
+            .get_at(name, distance - 1)
     }
 
     /// Assigns a variable by checking this environment, then walking up the enclosing
@@ -114,16 +110,16 @@ impl Environment {
     /// # Panics
     ///
     /// Panics if `distance` requires walking past the outermost environment.
-    pub fn assign_at(&mut self, token: &Token, value: Object, distance: usize) {
+    pub fn assign_at(&mut self, token: impl Into<String>, value: Object, distance: usize) {
+        let name = token.into();
         if distance == 0 {
-            self.values.insert(token.lexeme.clone(), value);
+            self.values.insert(name, value);
             return;
         }
-
         self.enclosing
             .as_ref()
             .unwrap()
             .borrow_mut()
-            .assign_at(token, value, distance - 1)
+            .assign_at(name, value, distance - 1)
     }
 }

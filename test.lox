@@ -1,15 +1,17 @@
+class Person {
+    init(name) {
+        this.name = name;
+    }
 
-// class Person {
-//     sayName() {
-//         print "I'am " + this.name;
-//     }
-// }
-// 
-// var alice = Person();
-// alice.name = "Alice";
-// alice.sayName();
-// 
+    sayName() {
+        print "I'm " + this.name;
+    }
+}
+
+var alice = Person("Alice");
+alice.sayName();
+
 // var bill = Person();
 // bill.name = "Bill";
-// bill.sayName = alice.sayName;
+// bill.sayName() = alice.sayName();
 // bill.sayName();

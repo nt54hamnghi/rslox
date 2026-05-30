@@ -2,31 +2,45 @@ use std::cell::RefCell;
 use std::fmt::Display;
 use std::rc::Rc;
 
+use crate::Object;
 use crate::interpreter::callable::Callable;
-use crate::interpreter::class::LoxInstance;
+use crate::interpreter::class::InstanceRef;
 use crate::interpreter::error::RuntimeEvent;
 use crate::interpreter::{Environment, EnvironmentRef, Interpreter};
 use crate::parser::stmt::Function;
-use crate::{Object, Value};
 
 #[derive(Debug, Clone)]
 pub struct LoxFunction {
     declaration: Function,
     closure: EnvironmentRef,
+    is_method: bool,
 }
 
 impl LoxFunction {
-    pub fn new(declaration: Function, closure: EnvironmentRef) -> Self {
+    pub fn new_function(declaration: Function, closure: EnvironmentRef) -> Self {
         Self {
             declaration,
             closure,
+            is_method: false,
         }
     }
 
-    pub fn bind(self, instance: LoxInstance) -> Self {
+    pub fn new_method(declaration: Function, closure: EnvironmentRef) -> Self {
+        Self {
+            declaration,
+            closure,
+            is_method: true,
+        }
+    }
+
+    pub fn is_initializer(&self) -> bool {
+        self.is_method && self.declaration.name.lexeme == "init"
+    }
+
+    pub fn bind(self, instance: InstanceRef) -> Self {
         let mut env = Environment::with_enclosing(self.closure);
-        env.define_name("this", Object::instance(instance));
-        Self::new(self.declaration, Rc::new(RefCell::new(env)))
+        env.define("this", Object::Instance(instance));
+        Self::new_method(self.declaration, Rc::new(RefCell::new(env)))
     }
 }
 
@@ -35,17 +49,22 @@ impl Callable for LoxFunction {
         let mut env = Environment::with_enclosing(self.closure.clone());
 
         for (param, arg) in self.declaration.parameters.iter().zip(args) {
-            env.define(param, arg.clone());
+            env.define(&param.lexeme, arg.clone());
         }
 
-        let Err(event) = interpreter.execute_block_with(&self.declaration.body, env) else {
-            return Ok(Value::Nil.into());
+        let ret = match interpreter.execute_block_with(&self.declaration.body, env) {
+            Ok(_) => Object::nil(),
+            Err(RuntimeEvent::Return(obj)) => obj,
+            Err(RuntimeEvent::Error(err)) => return Err(err.into()),
         };
 
-        match event {
-            RuntimeEvent::Return(obj) => Ok(obj),
-            RuntimeEvent::Error(err) => Err(err.into()),
+        if self.is_initializer() {
+            // unwrap is safe because self is a method bound to an instance, so its closure contains "this"
+            let this = self.closure.borrow().get_at("this", 0).unwrap();
+            return Ok(this);
         }
+
+        Ok(ret)
     }
 
     fn arity(&self) -> usize {
