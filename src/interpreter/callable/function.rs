@@ -52,7 +52,8 @@ impl Callable for LoxFunction {
             env.define(&param.lexeme, arg.clone());
         }
 
-        let ret = match interpreter.execute_block_with(&self.declaration.body, env) {
+        let env_ref = Rc::new(RefCell::new(env));
+        let ret = match interpreter.execute_block_with(&self.declaration.body, env_ref) {
             Ok(_) => Object::nil(),
             Err(RuntimeEvent::Return(obj)) => obj,
             Err(RuntimeEvent::Error(err)) => return Err(err.into()),
@@ -75,5 +76,29 @@ impl Callable for LoxFunction {
 impl Display for LoxFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "<fn {}>", self.declaration.name.lexeme)
+    }
+}
+
+#[cfg(debug_assertions)]
+#[allow(dead_code)]
+pub fn debug_print_environment_chain(env: &EnvironmentRef) {
+    let mut current = Some(Rc::clone(env));
+    let mut level = 0;
+
+    while let Some(env_ref) = current {
+        let env = env_ref.borrow();
+        let label = if env.enclosing.is_some() {
+            "local"
+        } else {
+            "global"
+        };
+
+        eprintln!("environment level {level} ({label}):");
+        for (name, value) in &env.values {
+            eprintln!("  {name} = {value}");
+        }
+
+        current = env.enclosing.as_ref().map(Rc::clone);
+        level += 1;
     }
 }

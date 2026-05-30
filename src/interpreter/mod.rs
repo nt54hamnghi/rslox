@@ -102,6 +102,32 @@ impl Interpreter {
             None => self.globals.borrow().get(name),
         }
     }
+
+    fn execute_block_with(
+        &mut self,
+        stmts: &[StmtNode],
+        env: EnvironmentRef,
+    ) -> Result<(), RuntimeEvent> {
+        let current = std::mem::replace(&mut self.environment, env);
+
+        let mut body = || {
+            for stmt in stmts {
+                if let Err(err) = self.execute(stmt) {
+                    return Err(err);
+                }
+            }
+            Ok(())
+        };
+        let ret = body();
+
+        self.environment = Rc::clone(&current);
+        ret
+    }
+
+    fn execute_block(&mut self, stmts: &[StmtNode]) -> Result<(), RuntimeEvent> {
+        let enclosed = Environment::with_enclosing(Rc::clone(&self.environment));
+        self.execute_block_with(stmts, Rc::new(RefCell::new(enclosed)))
+    }
 }
 
 impl stmt::Visitor for Interpreter {
@@ -196,87 +222,6 @@ impl stmt::Visitor for Interpreter {
     }
 }
 
-/// A guard that restores the interpreter's previous environment
-/// when temporary block execution ends.
-struct BlockGuard<'i> {
-    interpreter: &'i mut Interpreter,
-    previous: EnvironmentRef,
-}
-
-impl<'i> Drop for BlockGuard<'i> {
-    fn drop(&mut self) {
-        self.interpreter.environment = self.previous.clone();
-    }
-}
-
-impl Interpreter {
-    /// Creates a fresh environment for a new lexical block scope.
-    ///
-    /// This is used for ordinary `{ ... }` blocks. The new environment is
-    /// enclosed by the current one so name lookup follows the surrounding scope
-    /// chain. The returned [`BlockGuard`] owns the previous environment and
-    /// restores it when dropped.
-    fn enter_block<'i>(&'i mut self) -> BlockGuard<'i> {
-        let current = self.environment.clone();
-        let new_enclosed = Environment::with_enclosing(current.clone());
-        self.environment = Rc::new(RefCell::new(new_enclosed));
-
-        BlockGuard {
-            interpreter: self,
-            previous: current.clone(),
-        }
-    }
-
-    /// Executes statements in a new lexical block scope.
-    ///
-    /// Each statement runs with a new environment whose enclosing parent is the
-    /// environment active at the call site. The previous environment is restored
-    /// automatically, even if execution returns early with an error.
-    fn execute_block(&mut self, stmts: &[StmtNode]) -> Result<(), RuntimeEvent> {
-        let guard = self.enter_block();
-        for stmt in stmts {
-            if let Err(err) = guard.interpreter.execute(stmt) {
-                return Err(err);
-            }
-        }
-        Ok(())
-    }
-
-    /// Installs a caller-provided environment for block execution.
-    ///
-    /// This is used when the caller has already prepared the environment, such as
-    /// a function call frame with bound parameters. The returned [`BlockGuard`]
-    /// restores the previous interpreter environment on drop.
-    fn enter_block_with<'i>(&'i mut self, env: Environment) -> BlockGuard<'i> {
-        let current = self.environment.clone();
-        self.environment = Rc::new(RefCell::new(env));
-
-        BlockGuard {
-            interpreter: self,
-            previous: current.clone(),
-        }
-    }
-
-    /// Executes statements using an environment supplied by the caller.
-    ///
-    /// Unlike [`Interpreter::execute_block`], this does not allocate a child
-    /// environment on its own. It swaps in `env`, executes the statements, and
-    /// restores the previous environment afterward.
-    fn execute_block_with(
-        &mut self,
-        stmts: &[StmtNode],
-        env: Environment,
-    ) -> Result<(), RuntimeEvent> {
-        let guard = self.enter_block_with(env);
-        for stmt in stmts {
-            if let Err(err) = guard.interpreter.execute(stmt) {
-                return Err(err);
-            }
-        }
-        Ok(())
-    }
-}
-
 impl expr::Visitor for Interpreter {
     type Output = Result<Object, RuntimeEvent>;
 
@@ -364,7 +309,7 @@ impl expr::Visitor for Interpreter {
                 );
             }
             None => self
-                .environment
+                .globals
                 .borrow_mut()
                 .assign(&expr.name, value.clone())?,
         };
