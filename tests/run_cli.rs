@@ -1301,6 +1301,120 @@ fn test_closures_success(#[case] source: &str, #[case] expected_stdout: &str) {
 #[rstest]
 #[case(
     r#"
+    // This variable is used in the function `f` below.
+    var variable = "global";
+
+    {
+      fun f() {
+        print variable;
+      }
+
+      f(); // this should print "global"
+
+      // This variable declaration shouldn't affect
+      // the usage in `f` above.
+      var variable = "local";
+
+      f(); // this should still print "global"
+    }
+    "#,
+    "global\nglobal\n"
+)]
+#[case(
+    r#"
+    // This function is used in the function `f` below.
+    fun global() {
+      print "global";
+    }
+
+    {
+      fun f() {
+        global();
+      }
+
+      f(); // this should print "global"
+
+      // This function declaration shouldn't affect
+      // the usage in `f` above.
+      fun global() {
+        print "local";
+      }
+
+      f(); // this should also print "global"
+    }
+    "#,
+    "global\nglobal\n"
+)]
+#[case(
+    r#"
+    var x = "global";
+
+    fun outer() {
+      var x = "outer";
+
+      fun middle() {
+        // The `inner` function should capture the
+        // variable from the closest outer
+        // scope, which is the `outer` function's
+        // scope.
+        fun inner() {
+          print x; // Should capture "outer"
+        }
+
+        inner(); // Should print "outer"
+
+        // This variable declaration shouldn't affect
+        // the usage in `inner` above.
+        var x = "middle";
+
+        inner(); // Should still print "outer"
+      }
+
+      middle();
+    }
+
+    outer();
+    "#,
+    "outer\nouter\n"
+)]
+#[case(
+    r#"
+    var count = 0;
+
+    {
+      // The `counter` function should use the `count`
+      // variable from the
+      // global scope.
+      fun makeCounter() {
+        fun counter() {
+          // This should increment the `count`
+          // variable from the global scope.
+          count = count + 1;
+          print count;
+        }
+        return counter;
+      }
+
+      var counter1 = makeCounter();
+      counter1(); // Should print 1
+      counter1(); // Should print 2
+
+      // This variable declaration shouldn't affect
+      // our counter.
+      var count = 0;
+
+      counter1(); // Should print 3
+    }
+    "#,
+    "1\n2\n3\n"
+)]
+fn test_identifier_resolution_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"
     // This program tries to execute an integer as a
     // function
     24();
