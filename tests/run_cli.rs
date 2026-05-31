@@ -40,6 +40,18 @@ fn assert_success_output(source: &str, expected_stdout: &str) {
     );
 }
 
+fn assert_static_error(source: &str, expected_stderr_fragment: &str) {
+    let output = run_source(source);
+
+    assert_eq!(Some(65), output.status.code());
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.is_empty(), "static errors should not write stdout");
+
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(stderr.contains(expected_stderr_fragment));
+}
+
 #[test]
 fn test_print_requires_expression_reports_static_error_and_exit_65() {
     let output = run_source("print;\n");
@@ -343,8 +355,147 @@ fn test_variable_initialization_success(#[case] source: &str, #[case] expected_s
     "#,
     "2\n3\n5\n5\n"
 )]
+#[case(
+    r#"// First declaration of variable 'a' in global
+// scope
+var a = "value";
+
+// Redeclaring 'a' with its own value should be
+// allowed in global scope
+var a = a;
+print a; // this should print "value"
+"#,
+    "value\n"
+)]
 fn test_variable_redeclaration_success(#[case] source: &str, #[case] expected_stdout: &str) {
     assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"// Declare outer variable 'a' in global scope
+var a = "outer";
+
+{
+  // Attempting to declare local variable'a'
+  // initialized with itself
+  var a = a; // expect compile error
+}
+"#,
+    "[line 7] Error at 'a': Can't read local variable in its own initializer."
+)]
+#[case(
+    r#"// Helper function that simply returns its argument
+fun returnArg(arg) {
+  return arg;
+}
+
+// Declare global variable 'b'
+var b = "global";
+
+{
+  // Local variable declaration
+  var a = "first";
+
+  // Attempting to initialize local variable 'b'
+  // using local variable 'b'
+  // through a function call
+  var b = returnArg(b); // expect compile error
+  print b;
+}
+
+var b = b + " updated";
+print b;
+"#,
+    "[line 16] Error at 'b': Can't read local variable in its own initializer."
+)]
+#[case(
+    r#"fun outer() {
+  // Declare variable 'a' in outer function scope
+  var a = "outer";
+
+  // Inner function with its own scope
+  fun inner() {
+    // Attempting to declare local 'a' initialized
+    // with itself
+    var a = a; // expect compile error
+    print a;
+  }
+
+  inner();
+}
+
+outer();
+"#,
+    "[line 9] Error at 'a': Can't read local variable in its own initializer."
+)]
+fn test_self_initialization_errors_report_stderr_and_exit_65(
+    #[case] source: &str,
+    #[case] expected_stderr_fragment: &str,
+) {
+    assert_static_error(source, expected_stderr_fragment);
+}
+
+#[rstest]
+#[case(
+    r#"{
+  var a = "value";
+
+  // Attempting to redeclare 'a' in the same scope
+  var a = "other"; // expect compile error
+}
+"#,
+    "[line 5] Error at 'a': Already a variable with this name in this scope."
+)]
+#[case(
+    r#"// Function parameters are considered variables in
+// the function's scope
+fun foo(a) {
+  // Attempting to declare a variable with same
+  // name as parameter
+  var a; // expect compile error
+}
+"#,
+    "[line 6] Error at 'a': Already a variable with this name in this scope."
+)]
+#[case(
+    r#"// Function parameters must have unique names
+fun foo(arg, arg) { // expect compile error
+  // Function body is irrelevant as the error
+  // occurs in parameter list
+  "body";
+}
+"#,
+    "[line 2] Error at 'arg': Already a variable with this name in this scope."
+)]
+#[case(
+    r#"// Due to the compile error on line 17
+// Nothing should be printed
+var a = "1";
+print a;
+
+var a;
+print a;
+
+var a = "2";
+print a;
+
+{
+  // First declaration in local scope
+  var a = "1";
+
+  // Attempting to redeclare in local scope
+  var a = "2"; // This should be a compile error
+  print a;
+}
+"#,
+    "[line 17] Error at 'a': Already a variable with this name in this scope."
+)]
+fn test_variable_redeclaration_errors_report_stderr_and_exit_65(
+    #[case] source: &str,
+    #[case] expected_stderr_fragment: &str,
+) {
+    assert_static_error(source, expected_stderr_fragment);
 }
 
 #[rstest]
@@ -1053,6 +1204,83 @@ fn test_return_statements_success(#[case] source: &str, #[case] expected_stdout:
 
 #[rstest]
 #[case(
+    r#"fun foo() {
+  // Return statements are allowed within function
+  // scope
+  return "at function scope is ok";
+}
+
+// Return statements are not allowed at the
+// top-level
+return; // expect compile error
+"#,
+    "[line 9] Error at 'return': Can't return from top-level code."
+)]
+#[case(
+    r#"fun foo() {
+  if (true) {
+    return "early return";
+  }
+
+  for (var i = 0; i < 10; i = i + 1) {
+    return "loop return";
+  }
+}
+
+if (true) {
+  return "conditional return";
+  // expect compile error
+}
+"#,
+    "[line 12] Error at 'return': Can't return from top-level code."
+)]
+#[case(
+    r#"{
+  // Return statements are not allowed in
+  // top-level blocks
+  return "not allowed in a block either";
+  // expect compile error
+}
+
+fun allowed() {
+  if (true) {
+    return "this is fine";
+  }
+  return;
+}
+"#,
+    "[line 4] Error at 'return': Can't return from top-level code."
+)]
+#[case(
+    r#"fun outer() {
+  fun inner() {
+    return "ok";
+  }
+
+  return "also ok";
+}
+
+if (true) {
+  fun nested() {
+    return;
+  }
+
+  // Return statements are not allowed outside of
+  // functions
+  return "not ok"; // expect compile error
+}
+"#,
+    "[line 16] Error at 'return': Can't return from top-level code."
+)]
+fn test_invalid_return_errors_report_stderr_and_exit_65(
+    #[case] source: &str,
+    #[case] expected_stderr_fragment: &str,
+) {
+    assert_static_error(source, expected_stderr_fragment);
+}
+
+#[rstest]
+#[case(
     r#"
     // This program creates a function that returns
     // another function
@@ -1654,6 +1882,640 @@ fn test_function_syntactic_errors_report_output_and_exit_65(
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
     let combined = format!("{stdout}{stderr}");
     assert!(combined.contains(expected_output_fragment));
+}
+
+#[rstest]
+#[case(
+    r#"// Class declaration with empty body
+class Spaceship {}
+print Spaceship;
+"#,
+    "Spaceship\n"
+)]
+#[case(
+    r#"// Multiple class declarations with empty body
+class Robot {}
+class Wizard {}
+print Robot;
+print Wizard;
+print "Both classes successfully printed";
+"#,
+    "Robot\nWizard\nBoth classes successfully printed\n"
+)]
+#[case(
+    r#"// Class declaration inside function should work
+fun foo() {
+  class Superhero {}
+  print "Class declared inside function";
+  print Superhero;
+}
+
+foo();
+print "Function called successfully";
+"#,
+    "Class declared inside function\nSuperhero\nFunction called successfully\n"
+)]
+fn test_class_declarations_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[test]
+fn test_block_scoped_class_runtime_error_reports_stderr_and_exit_70() {
+    let source = r#"{
+  // Class declaration inside blocks should work
+  class Dinosaur {}
+  print "Inside block: Dinosaur exists";
+  print Dinosaur;
+}
+print "Accessing out-of-scope class:";
+print Dinosaur;  // expect runtime error
+"#;
+
+    let output = run_source(source);
+
+    assert_eq!(Some(70), output.status.code());
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert_eq!(
+        "Inside block: Dinosaur exists\nDinosaur\nAccessing out-of-scope class:\n",
+        stdout
+    );
+
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(stderr.contains("Undefined variable 'Dinosaur'."));
+    assert!(stderr.contains("[line 8]"));
+}
+
+#[rstest]
+#[case(
+    r#"// Class instantiation
+class Spaceship {}
+var falcon = Spaceship();
+print falcon;
+"#,
+    "Spaceship instance\n"
+)]
+#[case(
+    r#"// Instantiating multiple instances of a class
+// should work
+class Robot {}
+var r1 = Robot();
+var r2 = Robot();
+
+print "Created multiple robots:";
+print r1;
+print r2;
+"#,
+    "Created multiple robots:\nRobot instance\nRobot instance\n"
+)]
+#[case(
+    r#"class Wizard {}
+class Dragon {}
+
+// Instantiating classes in a function should work
+fun createCharacters() {
+  var merlin = Wizard();
+  var smaug = Dragon();
+  print "Characters created in fantasy world:";
+  print merlin;
+  print smaug;
+  return merlin;
+}
+
+var mainCharacter = createCharacters();
+// An instance of a class should be truthy
+if (mainCharacter) {
+  print "The main character is:";
+  print mainCharacter;
+} else {
+  print "Failed to create a main character.";
+}
+"#,
+    "Characters created in fantasy world:\nWizard instance\nDragon instance\nThe main character is:\nWizard instance\n"
+)]
+#[case(
+    r#"class Superhero {}
+
+var count = 0;
+while (count < 3) {
+  var hero = Superhero();
+  print "Hero created:";
+  print hero;
+  count = count + 1;
+}
+
+print "All heroes created!";
+"#,
+    "Hero created:\nSuperhero instance\nHero created:\nSuperhero instance\nHero created:\nSuperhero instance\nAll heroes created!\n"
+)]
+fn test_class_instances_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"class Spaceship {}
+var falcon = Spaceship();
+
+// Setting properties on an instance should work
+falcon.name = "Millennium Falcon";
+falcon.speed = 75.5;
+
+// Getting properties on an instance should work
+print "Ship details:";
+print falcon.name;
+print falcon.speed;
+"#,
+    "Ship details:\nMillennium Falcon\n75.5\n"
+)]
+#[case(
+    r#"class Robot {}
+var r2d2 = Robot();
+
+// Setting properties on an instance should work
+r2d2.model = "Astromech";
+r2d2.operational = true;
+
+// Getting properties on an instance should work
+if (r2d2.operational) {
+  print r2d2.model;
+  r2d2.mission = "Navigate hyperspace";
+  print r2d2.mission;
+}
+"#,
+    "Astromech\nNavigate hyperspace\n"
+)]
+#[case(
+    r#"class Superhero {}
+var batman = Superhero();
+var superman = Superhero();
+
+// Setting properties on an instance should work
+batman.name = "Batman";
+batman.called = 59;
+
+// Setting properties on an instance should work
+superman.name = "Superman";
+superman.called = 75;
+
+// Getting properties on an instance should work
+print "Times " + superman.name + " was called: ";
+print superman.called;
+print "Times " + batman.name + " was called: ";
+print batman.called;
+"#,
+    "Times Superman was called: \n75\nTimes Batman was called: \n59\n"
+)]
+#[case(
+    r#"class Wizard {}
+var gandalf = Wizard();
+
+gandalf.color = "Grey";
+gandalf.power = nil;
+print gandalf.color;
+
+// functions should be able to accept class
+// instances and get or set properties on them
+fun promote(wizard) {
+  wizard.color = "White";
+  if (true) {
+    wizard.power = 100;
+  } else {
+    wizard.power = 0;
+  }
+}
+
+promote(gandalf);
+print gandalf.color;
+print gandalf.power;
+"#,
+    "Grey\nWhite\n100\n"
+)]
+fn test_class_getters_and_setters_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"class Robot {
+  beep() {
+    print "Beep boop!";
+  }
+}
+
+var r2d2 = Robot();
+// Calling a method on an instance should work
+r2d2.beep();
+
+// Calling a method on a class instance should work
+Robot().beep();
+"#,
+    "Beep boop!\nBeep boop!\n"
+)]
+#[case(
+    r#"{
+  class Foo {
+    returnSelf() {
+      // Should be able to return the class itself
+      return Foo;
+    }
+  }
+
+  // Calling a method on an instance should work
+  print Foo().returnSelf();
+}
+"#,
+    "Foo\n"
+)]
+#[case(
+    r#"class Wizard {
+  castSpell(spell) {
+    // Methods should be able to accept a parameter
+    print "Casting a magical spell: " + spell;
+  }
+}
+
+class Dragon {
+  // Methods should be able to accept multiple
+  // parameters
+  breatheFire(fire, intensity) {
+    print "Breathing " + fire + " with intensity: "
+    + intensity;
+  }
+}
+
+var merlin = Wizard();
+var smaug = Dragon();
+
+if (false) {
+  var action = merlin.castSpell;
+  action("Fireball");
+} else {
+  var action = smaug.breatheFire;
+  action("Fire", "100");
+}
+"#,
+    "Breathing Fire with intensity: 100\n"
+)]
+#[case(
+    r#"class Superhero {
+  // Methods should be able to accept a parameter
+  useSpecialPower(hero) {
+    print "Using power: " + hero.specialPower;
+  }
+
+  // Methods should be able to accept a parameter
+  // of any type
+  hasSpecialPower(hero) {
+    return hero.specialPower;
+  }
+
+  // Methods should be able to accept class
+  // instances as parameters and then update their
+  // properties
+  giveSpecialPower(hero, power) {
+    hero.specialPower = power;
+  }
+}
+
+fun performHeroics(hero, superheroClass) {
+  if (superheroClass.hasSpecialPower(hero)) {
+    superheroClass.useSpecialPower(hero);
+  } else {
+    print "No special power available";
+  }
+}
+
+var superman = Superhero();
+var heroClass = Superhero();
+
+if (false) {
+  heroClass.giveSpecialPower(superman, "Flight");
+} else {
+  heroClass.giveSpecialPower(superman, "Strength");
+}
+
+performHeroics(superman, heroClass);
+"#,
+    "Using power: Strength\n"
+)]
+fn test_instance_methods_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"class Spaceship {
+  identify() {
+    // this should be bound to the instance
+    print this;
+  }
+}
+
+// Calling a method on a class instance should work
+Spaceship().identify();
+"#,
+    "Spaceship instance\n"
+)]
+#[case(
+    r#"class Calculator {
+  add(a, b) {
+    // this should be bound to the instance
+    return a + b + this.memory;
+  }
+}
+
+var calc = Calculator();
+// Instance properties should be accessible using
+// the this keyword
+calc.memory = 28;
+print calc.add(35, 1);
+"#,
+    "64\n"
+)]
+#[case(
+    r#"class Animal {
+  makeSound() {
+    print this.sound;
+  }
+
+  identify() {
+    print this.species;
+  }
+}
+
+var dog = Animal();
+dog.sound = "Woof";
+dog.species = "Dog";
+
+var cat = Animal();
+cat.sound = "Meow";
+cat.species = "Cat";
+
+// The this keyword should be bound to the
+// class instance that the method is called on
+cat.makeSound = dog.makeSound;
+dog.identify = cat.identify;
+
+cat.makeSound(); // expect: Woof
+dog.identify(); // expect: Cat
+"#,
+    "Woof\nCat\n"
+)]
+#[case(
+    r#"class Wizard {
+  getSpellCaster() {
+    fun castSpell() {
+      print this;
+      print "Casting spell as " + this.name;
+    }
+
+    // Functions are first-class objects in Lox
+    return castSpell;
+  }
+}
+
+var wizard = Wizard();
+wizard.name = "Merlin";
+
+// Calling an instance method that returns a
+// function should work
+wizard.getSpellCaster()();
+"#,
+    "Wizard instance\nCasting spell as Merlin\n"
+)]
+fn test_this_keyword_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"// The this keyword used outside of a class
+// should be a compile error
+print this;
+"#,
+    "[line 3] Error at 'this': Can't use 'this' outside of a class."
+)]
+#[case(
+    r#"// using this outside of a class shouldn't work
+fun notAMethod() {
+  print this; // expect compile error
+}
+"#,
+    "[line 3] Error at 'this': Can't use 'this' outside of a class."
+)]
+fn test_invalid_this_static_errors_report_stderr_and_exit_65(
+    #[case] source: &str,
+    #[case] expected_stderr_fragment: &str,
+) {
+    assert_static_error(source, expected_stderr_fragment);
+}
+
+#[rstest]
+#[case(
+    r#"class Person {
+  sayName() {
+    // this is not a callable object
+    print this(); // expect runtime error
+  }
+}
+Person().sayName();
+"#,
+    "Can only call functions and classes.",
+    "[line 4]"
+)]
+#[case(
+    r#"class Confused {
+  method() {
+    fun inner(instance) {
+      // this is a local variable
+      var feeling = "confused";
+      // Unless explicitly set, feeling can't be
+      // accessed using this keyword
+      print this.feeling; // expect runtime error
+    }
+    return inner;
+  }
+}
+
+var instance = Confused();
+var m = instance.method();
+// calling the function returned should work
+m(instance);
+"#,
+    "Undefined property 'feeling'.",
+    "[line 8]"
+)]
+fn test_invalid_this_runtime_errors_report_stderr_and_exit_70(
+    #[case] source: &str,
+    #[case] expected_message: &str,
+    #[case] expected_line: &str,
+) {
+    let output = run_source(source);
+
+    assert_eq!(Some(70), output.status.code());
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.is_empty());
+
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(stderr.contains(expected_message));
+    assert!(stderr.contains(expected_line));
+}
+
+#[rstest]
+#[case(
+    r#"class Default {
+  // this is the constructor
+  init() {
+    // it should be able to set
+    // properties on the instance
+    this.x = "quz";
+    this.y = 49;
+  }
+}
+
+// the constructor should be called
+// automatically  when the class is being
+// instantiated
+print Default().x;
+print Default().y;
+"#,
+    "quz\n49\n"
+)]
+#[case(
+    r#"class Robot {
+  // constructors should be able to accept
+  // one or more parameters
+  init(model, function) {
+    this.model = model;
+    this.function = function;
+  }
+}
+print Robot("R2-D2", "Astromech").model;
+"#,
+    "R2-D2\n"
+)]
+#[case(
+    r#"class Counter {
+  init(startValue) {
+    if (startValue < 0) {
+      print "startValue can't be negative";
+      this.count = 0;
+    } else {
+      this.count = startValue;
+    }
+  }
+}
+
+// constructor is called automatically here
+var instance = Counter(-67);
+print instance.count;
+
+// it should be possible to call the constructor
+// on a class instance as well
+print instance.init(67).count;
+"#,
+    "startValue can't be negative\n0\n67\n"
+)]
+#[case(
+    r#"class Vehicle {
+  init(type) {
+    this.type = type;
+  }
+}
+
+class Car {
+  init(make, model) {
+    this.make = make;
+    this.model = model;
+    this.wheels = "four";
+  }
+
+  describe() {
+    // expression across multiple lines should work
+    print this.make + " " + this.model +
+    " with " + this.wheels + " wheels";
+  }
+}
+
+var vehicle = Vehicle("Generic");
+print "Generic " + vehicle.type;
+
+var myCar = Car("Toyota", "Corolla");
+myCar.describe();
+"#,
+    "Generic Generic\nToyota Corolla with four wheels\n"
+)]
+fn test_constructor_calls_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[test]
+fn test_empty_return_from_constructor_success() {
+    let source = r#"class Person {
+  init() {
+    print "bar";
+    // constructor should return nothing
+    return;
+  }
+}
+
+Person();
+"#;
+
+    assert_success_output(source, "bar\n");
+}
+
+#[rstest]
+#[case(
+    r#"class ThingDefault {
+  init() {
+    this.x = "foo";
+    this.y = 42;
+    // constructor should not return the instance
+    return this; // expect compile error
+  }
+}
+var out = ThingDefault();
+print out;
+"#,
+    "[line 6] Error at 'return': Can't return a value from an initializer."
+)]
+#[case(
+    r#"class Foo {
+  init() {
+    // constructor should not return anything
+    return "something"; // expect compile error
+  }
+}
+
+Foo();
+"#,
+    "[line 4] Error at 'return': Can't return a value from an initializer."
+)]
+#[case(
+    r#"class Foo {
+  init() {
+    // just calling the callback should've worked
+    // but returning it is not allowed
+    return this.callback(); // expect compile error
+  }
+
+  callback() {
+    return "callback";
+  }
+}
+
+Foo();
+"#,
+    "[line 5] Error at 'return': Can't return a value from an initializer."
+)]
+fn test_constructor_return_value_errors_report_stderr_and_exit_65(
+    #[case] source: &str,
+    #[case] expected_stderr_fragment: &str,
+) {
+    assert_static_error(source, expected_stderr_fragment);
 }
 
 #[rstest]
