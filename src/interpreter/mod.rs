@@ -11,7 +11,7 @@ use crate::interpreter::class::{LoxClass, LoxInstance};
 use crate::interpreter::environment::{Environment, EnvironmentRef};
 use crate::interpreter::error::RuntimeEvent;
 use crate::parser::ast::NodeId;
-use crate::parser::expr::{self, Binary, Expr, ExprNode};
+use crate::parser::expr::{self, Binary, Expr, ExprNode, Visitor};
 use crate::parser::stmt::{self, Stmt, StmtNode};
 use crate::scanner::token::{Token, TokenType};
 use crate::{Object, Value};
@@ -26,12 +26,12 @@ impl Object {
     /// `nil` is false, booleans keep their value, and all other values are true.
     fn is_truthy(&self) -> bool {
         match self {
-            Object::Function(_) | Object::Instance(_) => true,
             Object::Primitive(value) => match value {
                 Value::Nil => false,
                 Value::Boolean(b) => *b,
                 _ => true,
             },
+            _ => true,
         }
     }
 }
@@ -202,6 +202,19 @@ impl stmt::Visitor for Interpreter {
     }
 
     fn visit_class_stmt(&mut self, stmt: &stmt::Class) -> Self::Output {
+        let superclass = match &stmt.superclass {
+            Some(var) => {
+                let Object::Class(superclass) = self.visit_variable_expr(var)? else {
+                    return Err(RuntimeEvent::error(
+                        var.name.clone(),
+                        "Superclass must be a class.",
+                    ));
+                };
+                Some(superclass)
+            }
+            None => None,
+        };
+
         self.environment
             .borrow_mut()
             .define(&stmt.name.lexeme, Object::nil());
@@ -212,7 +225,7 @@ impl stmt::Visitor for Interpreter {
             methods.insert(m.name.lexeme.clone(), f);
         }
 
-        let class = LoxClass::new(stmt.name.lexeme.to_owned(), methods);
+        let class = LoxClass::new(stmt.name.lexeme.to_owned(), superclass, methods);
 
         self.environment
             .borrow_mut()
@@ -236,11 +249,15 @@ impl expr::Visitor for Interpreter {
     }
 
     fn visit_call_expr(&mut self, expr: &expr::Call) -> Self::Output {
-        let Object::Function(callee) = self.evaluate(&expr.callee)? else {
-            return Err(RuntimeEvent::error(
-                expr.paren.clone(),
-                "Can only call functions and classes.",
-            ));
+        let callee = match self.evaluate(&expr.callee)? {
+            Object::Function(callable) => callable,
+            Object::Class(class) => Box::new(class),
+            _ => {
+                return Err(RuntimeEvent::error(
+                    expr.paren.clone(),
+                    "Can only call functions and classes.",
+                ));
+            }
         };
 
         if expr.arguments.len() != callee.arity() {

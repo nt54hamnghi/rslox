@@ -13,7 +13,8 @@ statement      → exprStmt
                | printStmt
                | block ;
 
-classDecl      → "class" IDENTIFIER "{" function* "}";
+classDecl      → "class" IDENTIFIER ( "<" IDENTIFIER )?
+                 "{" function* "}" ;
 
 returnStmt     → "return" expression? ";" ;
 

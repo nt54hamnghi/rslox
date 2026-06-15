@@ -15,11 +15,20 @@ pub struct LoxClass {
     // TODO: remove pub
     pub name: String,
     pub methods: HashMap<String, LoxFunction>,
+    pub superclass: Option<Rc<LoxClass>>,
 }
 
 impl LoxClass {
-    pub fn new(name: String, methods: HashMap<String, LoxFunction>) -> Self {
-        Self { name, methods }
+    pub fn new(
+        name: String,
+        superclass: Option<Rc<LoxClass>>,
+        methods: HashMap<String, LoxFunction>,
+    ) -> Self {
+        Self {
+            name,
+            superclass,
+            methods,
+        }
     }
 
     pub fn find_method(&self, name: impl AsRef<str>) -> Option<&LoxFunction> {

@@ -104,9 +104,21 @@ impl Parser {
         self.statement()
     }
 
-    /// classDecl → "class" IDENTIFIER "{" function* "}";
+    /// classDecl → "class" IDENTIFIER ( "<" IDENTIFIER )? "{" function* "}" ;
     fn class_declaration(&mut self) -> Result<StmtNode, StaticError> {
         let name = self.next_ok(TokenType::Identifier, "Expect class name.".to_owned())?;
+
+        let superclass = match self.next_if(TokenType::Less) {
+            Some(_) => {
+                let name =
+                    self.next_ok(TokenType::Identifier, "Expect superclass name.".to_owned())?;
+                let expr = self.ctx.new_variable(name);
+                // unwrap is safe because expr is a Variable as we just created it
+                Some(expr.get::<Variable>().unwrap())
+            }
+            None => None,
+        };
+
         self.next_ok(
             TokenType::LeftBrace,
             "Expect '{' before class body.".to_owned(),
@@ -126,7 +138,7 @@ impl Parser {
             "Expect '}' after class body.".to_owned(),
         )?;
 
-        Ok(self.ctx.new_class(name, methods))
+        Ok(self.ctx.new_class(name, superclass, methods))
     }
 
     /// varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;

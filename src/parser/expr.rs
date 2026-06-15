@@ -210,14 +210,14 @@ impl ExprNode {
     /// stored value's id does not match this node's id.
     pub(super) fn get<T: 'static + Clone + Expr>(&self) -> Option<T> {
         let nodes = self.ctx.nodes.borrow();
-        let value = nodes[self.id].downcast_ref::<T>().cloned();
+        let value = nodes[self.id].downcast_ref::<T>();
 
         assert!(
-            value.as_ref().is_none_or(|v| v.id() == self.id),
+            value.as_ref().is_none_or(|stored| stored.id() == self.id),
             "stored expression node id does not match ExprNode id"
         );
 
-        value
+        value.cloned()
     }
 }
 

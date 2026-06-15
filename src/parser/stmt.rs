@@ -1,5 +1,5 @@
 use crate::parser::ast::{Context, NodeId};
-use crate::parser::expr::ExprNode;
+use crate::parser::expr::{ExprNode, Variable};
 use crate::scanner::token::Token;
 
 pub trait Stmt {
@@ -141,11 +141,20 @@ impl Context {
         }
     }
 
-    pub(super) fn new_class(&'static self, name: Token, methods: Vec<Function>) -> StmtNode {
-        let id = self
-            .nodes
-            .borrow_mut()
-            .insert_with_key(|id| Box::new(Class { id, name, methods }));
+    pub(super) fn new_class(
+        &'static self,
+        name: Token,
+        superclass: Option<Variable>,
+        methods: Vec<Function>,
+    ) -> StmtNode {
+        let id = self.nodes.borrow_mut().insert_with_key(|id| {
+            Box::new(Class {
+                id,
+                name,
+                superclass,
+                methods,
+            })
+        });
         StmtNode {
             ctx: self,
             id,
@@ -169,14 +178,14 @@ impl StmtNode {
     /// stored value's id does not match this node's id.
     pub(super) fn get<T: 'static + Clone + Stmt>(&self) -> Option<T> {
         let nodes = self.ctx.nodes.borrow();
-        let value = nodes[self.id].downcast_ref::<T>().cloned();
+        let value = nodes[self.id].downcast_ref::<T>();
 
         assert!(
-            value.as_ref().is_none_or(|v| v.id() == self.id),
+            value.is_none_or(|stored| stored.id() == self.id),
             "stored statement node id does not match StmtNode id"
         );
 
-        value
+        value.cloned()
     }
 }
 
@@ -219,6 +228,7 @@ pub enum StmtKind {
 pub struct Class {
     id: NodeId,
     pub name: Token,
+    pub superclass: Option<Variable>,
     pub methods: Vec<Function>,
 }
 

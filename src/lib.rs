@@ -1,7 +1,8 @@
 use std::fmt::{Debug, Display};
+use std::rc::Rc;
 
 use crate::interpreter::callable::Callable;
-use crate::interpreter::class::InstanceRef;
+use crate::interpreter::class::{InstanceRef, LoxClass};
 
 pub mod cli;
 pub mod error;
@@ -14,12 +15,17 @@ pub mod scanner;
 pub enum Object {
     Primitive(Value),
     Function(Box<dyn Callable>),
+    Class(Rc<LoxClass>),
     Instance(InstanceRef),
 }
 
 impl Object {
     pub fn function<T: Callable + 'static>(fun: T) -> Self {
         Object::Function(Box::new(fun))
+    }
+
+    pub fn class(class: LoxClass) -> Self {
+        Object::Class(Rc::new(class))
     }
 
     pub fn nil() -> Self {
@@ -41,6 +47,7 @@ impl Display for Object {
         match self {
             Object::Primitive(value) => Display::fmt(value, f),
             Object::Function(fun) => Display::fmt(fun, f),
+            Object::Class(class) => Display::fmt(class, f),
             Object::Instance(instance) => Display::fmt(&instance.borrow(), f),
         }
     }

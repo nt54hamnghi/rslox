@@ -4,7 +4,7 @@ use slotmap::SecondaryMap;
 
 use crate::error::StaticError;
 use crate::parser::ast::NodeId;
-use crate::parser::expr::{self, Expr, ExprNode};
+use crate::parser::expr::{self, Expr, ExprNode, Visitor};
 use crate::parser::stmt::{self, Stmt, StmtNode};
 use crate::scanner::token::Token;
 
@@ -231,6 +231,18 @@ impl stmt::Visitor for Resolver {
         self.with_class_context(ClassType::Class, |this| {
             this.declare(&stmt.name)?;
             this.define(&stmt.name);
+
+            if let Some(superclass) = &stmt.superclass {
+                if stmt.name.lexeme == superclass.name.lexeme {
+                    return Err(StaticError::error_at_token(
+                        &superclass.name,
+                        "A class can't inherit from itself.",
+                    ));
+                }
+
+                this.visit_variable_expr(superclass)?;
+            }
+
             this.with_new_scope(|this| {
                 this.scopes
                     .last_mut()
