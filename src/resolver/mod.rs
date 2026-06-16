@@ -241,9 +241,14 @@ impl stmt::Visitor for Resolver {
                 }
 
                 this.visit_variable_expr(superclass)?;
+                this.begin_scope();
+                this.scopes
+                    .last_mut()
+                    .unwrap()
+                    .insert("super".to_owned(), true);
             }
 
-            this.with_new_scope(|this| {
+            let ret = this.with_new_scope(|this| {
                 this.scopes
                     .last_mut()
                     .unwrap()
@@ -256,7 +261,13 @@ impl stmt::Visitor for Resolver {
                     this.resolve_function(method, typ)?;
                 }
                 Ok(())
-            })
+            });
+
+            if stmt.superclass.is_some() {
+                this.end_scope();
+            }
+
+            ret
         })
     }
 }
@@ -287,6 +298,11 @@ impl expr::Visitor for Resolver {
     fn visit_set_expr(&mut self, expr: &expr::Set) -> Self::Output {
         self.resolve_expression(expr.value)?;
         self.resolve_expression(expr.object)
+    }
+
+    fn visit_super_expr(&mut self, expr: &expr::Super) -> Self::Output {
+        self.resolve_local(expr, &expr.keyword);
+        Ok(())
     }
 
     fn visit_this_expr(&mut self, expr: &expr::This) -> Self::Output {

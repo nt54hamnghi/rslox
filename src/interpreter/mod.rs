@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Not;
+use std::panic;
 use std::rc::Rc;
 
 use slotmap::SecondaryMap;
@@ -219,10 +220,21 @@ impl stmt::Visitor for Interpreter {
             .borrow_mut()
             .define(&stmt.name.lexeme, Object::nil());
 
+        let enclosing = Rc::clone(&self.environment);
+        if let Some(superclass) = superclass.as_ref() {
+            let mut new = Environment::with_enclosing(Rc::clone(&enclosing));
+            new.define("super", Object::Class(Rc::clone(superclass)));
+            self.environment = Rc::new(RefCell::new(new));
+        }
+
         let mut methods = HashMap::with_capacity(stmt.methods.len());
         for m in &stmt.methods {
             let f = LoxFunction::new_method(m.clone(), Rc::clone(&self.environment));
             methods.insert(m.name.lexeme.clone(), f);
+        }
+
+        if superclass.is_some() {
+            self.environment = enclosing;
         }
 
         let class = LoxClass::new(stmt.name.lexeme.to_owned(), superclass, methods);
@@ -304,6 +316,34 @@ impl expr::Visitor for Interpreter {
         let value = self.evaluate(&expr.value)?;
         LoxInstance::set(instance, &expr.name, value.clone());
         Ok(value)
+    }
+
+    fn visit_super_expr(&mut self, expr: &expr::Super) -> Self::Output {
+        let distance = self
+            .locals
+            .get(expr.id())
+            .expect("unresolved super expression");
+
+        let Some(Object::Class(superclass)) = self.environment.borrow().get_at("super", *distance)
+        else {
+            panic!("expected 'super' to resolve to a class object")
+        };
+
+        let Some(Object::Instance(instance)) =
+            self.environment.borrow().get_at("this", *distance - 1)
+        else {
+            panic!("expected 'this' to resolve to an instance object")
+        };
+
+        let Some(method) = superclass.find_method(&expr.method.lexeme).cloned() else {
+            return Err(RuntimeEvent::error(
+                expr.method.clone(),
+                format!("Undefined property '{}'.", &expr.method.lexeme),
+            ));
+        };
+
+        let method = method.bind(instance);
+        Ok(Object::function(method))
     }
 
     fn visit_this_expr(&mut self, expr: &expr::This) -> Self::Output {

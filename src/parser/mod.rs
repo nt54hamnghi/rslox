@@ -143,7 +143,7 @@ impl Parser {
 
     /// varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
     fn var_declaration(&mut self) -> Result<StmtNode, StaticError> {
-        let name = self.next_ok(TokenType::Identifier, "Expect variable name.".into())?;
+        let name = self.next_ok(TokenType::Identifier, "Expect variable name.")?;
 
         let mut init = None;
         if self.next_if(TokenType::Equal).is_some() {
@@ -172,14 +172,14 @@ impl Parser {
                     let error = self.error("Can't have more than 255 parameters.");
                     eprintln!("{error}");
                 }
-                let param = self.next_ok(TokenType::Identifier, "Expect parameter name.".into())?;
+                let param = self.next_ok(TokenType::Identifier, "Expect parameter name.")?;
                 parameters.push(param);
                 if self.next_if(TokenType::Comma).is_none() {
                     break;
                 }
             }
         }
-        self.next_ok(TokenType::RightParen, "Expect ')' after parameters.".into())?;
+        self.next_ok(TokenType::RightParen, "Expect ')' after parameters.")?;
         // consume the { at the beginning of the body before calling block().
         // because block() assumes the left brace token has already been matched.
         self.next_ok(
@@ -227,16 +227,13 @@ impl Parser {
         if !self.peek_check(TokenType::Semicolon) {
             value = Some(self.expression()?);
         }
-        self.next_ok(
-            TokenType::Semicolon,
-            "Expect ';' after return value.".into(),
-        )?;
+        self.next_ok(TokenType::Semicolon, "Expect ';' after return value.")?;
         Ok(self.ctx.new_return(keyword, value))
     }
 
     /// forStmt → "for" "(" ( varDecl | exprStmt | ";" ) expression? ";" expression? ")" statement ;
     fn for_statement(&mut self) -> Result<StmtNode, StaticError> {
-        self.next_ok(TokenType::LeftParen, "Expect '(' after 'for'.".into())?;
+        self.next_ok(TokenType::LeftParen, "Expect '(' after 'for'.")?;
 
         // parse initializer
         let init = if self.next_if(TokenType::Semicolon).is_some() {
@@ -252,20 +249,14 @@ impl Parser {
         let mut cond = self.ctx.new_literal(Value::from(true));
         if self.next_if(TokenType::Semicolon).is_none() {
             cond = self.expression()?;
-            self.next_ok(
-                TokenType::Semicolon,
-                "Expect ';' after loop condition.".into(),
-            )?;
+            self.next_ok(TokenType::Semicolon, "Expect ';' after loop condition.")?;
         };
 
         // parse increment
         let mut incr = None;
         if self.next_if(TokenType::RightParen).is_none() {
             incr = Some(self.expression()?);
-            self.next_ok(
-                TokenType::RightParen,
-                "Expect ')' after for clauses.".into(),
-            )?;
+            self.next_ok(TokenType::RightParen, "Expect ')' after for clauses.")?;
         };
 
         let mut body = self.statement()?;
@@ -285,12 +276,9 @@ impl Parser {
 
     /// whileStmt → "while" "(" expression ")" statement ;
     fn while_statement(&mut self) -> Result<StmtNode, StaticError> {
-        self.next_ok(TokenType::LeftParen, "Expect '(' after 'while'.".into())?;
+        self.next_ok(TokenType::LeftParen, "Expect '(' after 'while'.")?;
         let cond = self.expression()?;
-        self.next_ok(
-            TokenType::RightParen,
-            "Expect ')' after while condition.".into(),
-        )?;
+        self.next_ok(TokenType::RightParen, "Expect ')' after while condition.")?;
 
         let body = self.statement()?;
 
@@ -299,12 +287,9 @@ impl Parser {
 
     // ifStmt → "if" "(" expression ")" statement ( "else" statement )? ;
     fn if_statement(&mut self) -> Result<StmtNode, StaticError> {
-        self.next_ok(TokenType::LeftParen, "Expect '(' after 'if'.".into())?;
+        self.next_ok(TokenType::LeftParen, "Expect '(' after 'if'.")?;
         let cond = self.expression()?;
-        self.next_ok(
-            TokenType::RightParen,
-            "Expect ')' after if condition.".into(),
-        )?;
+        self.next_ok(TokenType::RightParen, "Expect ')' after if condition.")?;
 
         let then_branch = self.statement()?;
 
@@ -324,7 +309,7 @@ impl Parser {
             statements.push(stmt);
         }
 
-        self.next_ok(TokenType::RightBrace, "Expect '}' after block.".into())?;
+        self.next_ok(TokenType::RightBrace, "Expect '}' after block.")?;
         Ok(statements)
     }
 
@@ -496,7 +481,7 @@ impl Parser {
                 }
             }
         }
-        let paren = self.next_ok(TokenType::RightParen, "Expect ')' after arguments.".into())?;
+        let paren = self.next_ok(TokenType::RightParen, "Expect ')' after arguments.")?;
 
         Ok(self.ctx.new_call(callee, paren, args))
     }
@@ -525,8 +510,14 @@ impl Parser {
 
         if self.next_if(TokenType::LeftParen).is_some() {
             let expr = self.expression()?;
-            self.next_ok(TokenType::RightParen, "Expect ')' after expression".into())?;
+            self.next_ok(TokenType::RightParen, "Expect ')' after expression")?;
             return Ok(self.ctx.new_grouping(expr));
+        }
+
+        if let Some(super_kw) = self.next_if(TokenType::Super) {
+            self.next_ok(TokenType::Dot, "Expect '.' after 'super'.")?;
+            let method = self.next_ok(TokenType::Identifier, "Expect superclass method name.")?;
+            return Ok(self.ctx.new_super(super_kw, method));
         }
 
         if let Some(this) = self.next_if(TokenType::This) {
@@ -584,7 +575,7 @@ impl Parser {
     /// Returns:
     /// - `Ok(Token)` if the next token matches the given type, consuming it.
     /// - `Err(Report)` if the next token doesn't match or if at end of tokens.
-    fn next_ok(&mut self, tt: TokenType, message: String) -> Result<Token, StaticError> {
+    fn next_ok(&mut self, tt: TokenType, message: impl Into<String>) -> Result<Token, StaticError> {
         self.next_if(tt).ok_or(self.error(message))
     }
 
@@ -594,7 +585,7 @@ impl Parser {
     /// - `Ok(Token)` when the next token is `;`, consuming it.
     /// - `Err(Report)` when `;` is missing.
     fn expect_semicolon(&mut self) -> Result<Token, StaticError> {
-        self.next_ok(TokenType::Semicolon, "Expect ';' after value.".into())
+        self.next_ok(TokenType::Semicolon, "Expect ';' after value.")
     }
 
     /// Checks if the parser has reached the end of the token stream.

@@ -45,6 +45,10 @@ impl Visitor for AstPrinter {
         todo!()
     }
 
+    fn visit_super_expr(&mut self, _expr: &super::expr::Super) -> Self::Output {
+        todo!()
+    }
+
     fn visit_this_expr(&mut self, _expr: &super::expr::This) -> Self::Output {
         todo!()
     }
