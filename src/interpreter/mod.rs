@@ -229,7 +229,7 @@ impl stmt::Visitor for Interpreter {
 
         self.environment
             .borrow_mut()
-            .assign(&stmt.name, Object::function(Rc::new(class)))?;
+            .assign(&stmt.name, Object::class(class))?;
 
         Ok(())
     }

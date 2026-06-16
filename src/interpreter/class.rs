@@ -32,7 +32,17 @@ impl LoxClass {
     }
 
     pub fn find_method(&self, name: impl AsRef<str>) -> Option<&LoxFunction> {
-        self.methods.get(name.as_ref())
+        let name = name.as_ref();
+
+        if let Some(method) = self.methods.get(name) {
+            return Some(method);
+        }
+
+        if let Some(superclass) = self.superclass.as_deref() {
+            return superclass.find_method(name);
+        }
+
+        None
     }
 }
 
