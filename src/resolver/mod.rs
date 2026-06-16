@@ -22,6 +22,7 @@ enum ClassType {
     #[default]
     None,
     Class,
+    Subclass,
 }
 
 /// A map of variable names to their resolved state.
@@ -239,8 +240,9 @@ impl stmt::Visitor for Resolver {
                         "A class can't inherit from itself.",
                     ));
                 }
-
                 this.visit_variable_expr(superclass)?;
+
+                this.current_class = ClassType::Subclass;
                 this.begin_scope();
                 this.scopes
                     .last_mut()
@@ -258,6 +260,7 @@ impl stmt::Visitor for Resolver {
                     if method.name.lexeme == "init" {
                         typ = FunctionType::Initializer;
                     }
+                    // FIXME: superclass scope won't work properly if we return early here
                     this.resolve_function(method, typ)?;
                 }
                 Ok(())
@@ -265,6 +268,7 @@ impl stmt::Visitor for Resolver {
 
             if stmt.superclass.is_some() {
                 this.end_scope();
+                this.current_class = ClassType::Class;
             }
 
             ret
@@ -301,8 +305,20 @@ impl expr::Visitor for Resolver {
     }
 
     fn visit_super_expr(&mut self, expr: &expr::Super) -> Self::Output {
-        self.resolve_local(expr, &expr.keyword);
-        Ok(())
+        match self.current_class {
+            ClassType::None => Err(StaticError::error_at_token(
+                &expr.keyword,
+                "Can't use 'super' outside of a class.",
+            )),
+            ClassType::Class => Err(StaticError::error_at_token(
+                &expr.keyword,
+                "Can't use 'super' in a class with no superclass.",
+            )),
+            ClassType::Subclass => {
+                self.resolve_local(expr, &expr.keyword);
+                Ok(())
+            }
+        }
     }
 
     fn visit_this_expr(&mut self, expr: &expr::This) -> Self::Output {
