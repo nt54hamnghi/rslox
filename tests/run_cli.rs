@@ -2081,6 +2081,482 @@ fn test_class_hierarchy_success(#[case] source: &str, #[case] expected_stdout: &
 
 #[rstest]
 #[case(
+    r#"class Doughnut {
+  cook() {
+    print "Fry until golden brown.";
+    }
+  }
+
+// BostonCream is a subclass of Doughnut
+class BostonCream < Doughnut {}
+
+// BostonCream class should inherit the cook
+// method from Doughnut class
+BostonCream().cook();
+"#,
+    "Fry until golden brown.\n"
+)]
+#[case(
+    r#"class Root {
+  getName() {
+    print "Root class";
+  }
+}
+
+class Parent < Root {
+  parentMethod() {
+    print "Method defined in Parent";
+  }
+}
+
+class Child < Parent {
+  childMethod() {
+    print "Method defined in Child";
+  }
+}
+
+var root = Root();
+var parent = Parent();
+var child = Child();
+
+// Root methods are available to all
+root.getName();
+parent.getName();
+child.getName();
+
+// Parent methods are available to Parent and Child
+parent.parentMethod();
+child.parentMethod();
+
+// Child methods are only available to Child
+child.childMethod();
+"#,
+    "Root class\nRoot class\nRoot class\nMethod defined in Parent\nMethod defined in Parent\nMethod defined in Child\n"
+)]
+#[case(
+    r#"class Foo {
+  init() {
+    this.secret = 42;
+  }
+}
+
+// Bar is a subclass of Foo
+class Bar < Foo {}
+
+// Baz is a subclass of Bar
+class Baz < Bar {}
+
+var baz = Baz();
+
+// Baz should inherit the constructor from Foo
+// which should set the secret value to 42
+print baz.secret;
+"#,
+    "42\n"
+)]
+#[case(
+    r#"class hello {
+  inhello() {
+    print "from hello";
+  }
+}
+
+class bar < hello {
+  inbar() {
+    print "from bar";
+  }
+}
+
+class world < bar {
+  inworld() {
+    print "from world";
+  }
+}
+
+// world should inherit the methods
+// from both hello and bar
+var world = world();
+world.inhello();
+world.inbar();
+world.inworld();
+"#,
+    "from hello\nfrom bar\nfrom world\n"
+)]
+fn test_inherited_methods_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"class A {
+  method() {
+    print "A method";
+  }
+}
+
+
+// B inherits method `method` from A
+// and overrides it with a new implementation
+class B < A {
+  method() {
+    print "B method";
+  }
+}
+
+var b = B();
+b.method();  // expect: B method
+"#,
+    "B method\n"
+)]
+#[case(
+    r#"class Base {
+  init(a) {
+    this.a = a;
+  }
+}
+
+
+// Constructors can also be overridden
+class Derived < Base {
+  init(a, b) {
+    this.a = a;
+    this.b = b;
+  }
+}
+
+var derived = Derived(20, 78);
+print derived.a;
+print derived.b;
+"#,
+    "20\n78\n"
+)]
+#[case(
+    r#"class Base {
+  init(a) {
+    this.a = a;
+  }
+
+  cook() {
+    return "Base cooking " + this.a;
+  }
+}
+
+class Derived < Base {
+  init(a, b) {
+    this.a = a;
+    this.b = b;
+  }
+
+  // Derived overrides the cook method of Base
+  cook() {
+    return "Derived cooking " + this.b + " with "
+    + this.a + " and " + this.b;
+  }
+
+  makeFood() {
+    return this.cook();
+  }
+}
+
+var derived = Derived("onions", "shallots");
+print derived.a;
+print derived.b;
+
+print Base("ingredient").cook();
+print derived.cook();
+"#,
+    "onions\nshallots\nBase cooking ingredient\nDerived cooking shallots with onions and shallots\n"
+)]
+#[case(
+    r#"class Animal {
+  speak() {
+    return "Animal speaks";
+  }
+
+  makeSound() {
+    return "Generic sound";
+  }
+
+  communicate() {
+    return this.speak() + " : " + this.makeSound();
+  }
+}
+
+// Dog inherits the speak and makeSound methods
+// from Animal and overrides them with new
+// implementations specific to dogs
+class Dog < Animal {
+  speak() {
+    return "Dog speaks";
+  }
+
+  makeSound() {
+    return "Woof";
+  }
+}
+
+// Puppy inherits the speak and makeSound methods
+// from Dog and overrides them with new
+// implementations specific to puppies
+class Puppy < Dog {
+  speak() {
+    return "Puppy speaks";
+  }
+}
+
+var animal = Animal();
+var dog = Dog();
+var puppy = Puppy();
+
+print animal.communicate();
+print dog.communicate();
+print puppy.communicate();
+"#,
+    "Animal speaks : Generic sound\nDog speaks : Woof\nPuppy speaks : Woof\n"
+)]
+fn test_overridden_methods_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[test]
+fn test_class_cannot_inherit_from_itself_reports_static_error_and_exit_65() {
+    let source = r#"// A class can't inherit from itself.
+class Foo < Foo {} // expect compile error
+"#;
+
+    assert_static_error(
+        source,
+        "[line 2] Error at 'Foo': A class can't inherit from itself.",
+    );
+}
+
+#[rstest]
+#[case(
+    r#"fun A() {}
+
+// A class can only inherit from a class.
+class B < A {} // expect runtime error
+
+print A();
+print B();
+"#,
+    "[line 4]"
+)]
+#[case(
+    r#"var A = "class";
+
+// A class can only inherit from a class
+class B < A {} // expect runtime error
+
+print B();
+"#,
+    "[line 4]"
+)]
+#[case(
+    r#"class A {
+  method() {
+    print "A";
+  }
+}
+
+class B < A {}
+class C < B {}
+class D < A {}
+
+// B is updated to a non-class value
+B = "not a class";
+// E inherits from B, which is not a class
+class E < B {}  // expect runtime error
+"#,
+    "[line 14]"
+)]
+fn test_inheritance_runtime_errors_report_stderr_and_exit_70(
+    #[case] source: &str,
+    #[case] expected_line: &str,
+) {
+    let output = run_source(source);
+
+    assert_eq!(Some(70), output.status.code());
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.is_empty());
+
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(stderr.contains("Superclass must be a class."));
+    assert!(stderr.contains(expected_line));
+}
+
+#[rstest]
+#[case(
+    r#"class Doughnut {
+  cook() {
+    print "Fry until golden brown.";
+  }
+}
+
+// Super can be used to call the overridden method
+// of the parent class
+class BostonCream < Doughnut {
+  cook() {
+    super.cook();
+  }
+}
+
+BostonCream().cook();
+"#,
+    "Fry until golden brown.\n"
+)]
+#[case(
+    r#"class A {
+  say() {
+    print "A";
+  }
+}
+
+class B < A {
+  // test calls say() from A
+  test() {
+    super.say();
+  }
+
+  say() {
+    print "B";
+  }
+}
+
+// C inherits test() from B
+// But the super keyword used in test()
+// should still have a binding to B
+class C < B {
+  say() {
+    print "C";
+  }
+}
+
+C().say();
+C().test(); // expect: A
+"#,
+    "C\nA\n"
+)]
+#[case(
+    r#"class A {
+  say() {
+    print "A";
+  }
+}
+
+class B < A {
+  getClosure() {
+    fun closure() {
+      super.say();
+    }
+    return closure;
+  }
+
+  say() {
+    print "B";
+  }
+}
+
+class C < B {
+  say() {
+    print "C";
+  }
+}
+
+// C inherits getClosure() from B
+// But the super keyword used in getClosure()
+// should still have a binding to B
+C().getClosure()(); // expect: A
+"#,
+    "A\n"
+)]
+#[case(
+    r#"class Base {
+  method() {
+    print "Base.method()";
+  }
+}
+
+// Parent inherits method from Base
+class Parent < Base {
+  method() {
+    super.method();
+  }
+}
+
+// Child inherits method from Parent
+class Child < Parent {
+  method() {
+    super.method();
+  }
+}
+
+var parent = Parent();
+parent.method(); // expect: Base.method()
+var child = Child();
+child.method(); // expect: Base.method()
+"#,
+    "Base.method()\nBase.method()\n"
+)]
+fn test_super_keyword_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
+    r#"class Foo {
+  cook() {
+    // Foo is not a subclass
+    super.cook(); // expect compile error
+  }
+}
+"#,
+    "[line 4] Error at 'super': Can't use 'super' in a class with no superclass."
+)]
+#[case(
+    r#"// super can't be used outside of a class
+super.notEvenInAClass(); // expect compile error
+"#,
+    "[line 2] Error at 'super': Can't use 'super' outside of a class."
+)]
+#[case(
+    r#"class A {
+  method() {}
+}
+
+class B < A {
+  method() {
+    // super must be followed by `.`
+    // and an expression
+    (super).method(); // expect compile error
+  }
+}
+"#,
+    "[line 9] Error at ')': Expect '.' after 'super'."
+)]
+#[case(
+    r#"class A {}
+
+class B < A {
+  method() {
+    // super must be followed by `.`
+    // and an expression
+    super; // expect compile error
+  }
+}
+"#,
+    "[line 7] Error at ';': Expect '.' after 'super'."
+)]
+fn test_invalid_super_static_errors_report_stderr_and_exit_65(
+    #[case] source: &str,
+    #[case] expected_stderr_fragment: &str,
+) {
+    assert_static_error(source, expected_stderr_fragment);
+}
+
+#[rstest]
+#[case(
     r#"class Spaceship {}
 var falcon = Spaceship();
 
