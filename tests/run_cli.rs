@@ -2014,6 +2014,73 @@ fn test_class_instances_success(#[case] source: &str, #[case] expected_stdout: &
 
 #[rstest]
 #[case(
+    r#"class Doughnut {}
+
+// BostonCream is a subclass of Doughnut
+class BostonCream < Doughnut {}
+
+print Doughnut();
+print BostonCream();
+"#,
+    "Doughnut instance\nBostonCream instance\n"
+)]
+#[case(
+    r#"{
+  class A {}
+
+  // B is a subclass of A
+  class B < A {}
+
+  // C is also a subclass of A
+  class C < A {}
+
+  print A();
+  print B();
+  print C();
+}
+"#,
+    "A instance\nB instance\nC instance\n"
+)]
+#[case(
+    r#"class A {}
+
+fun f() {
+  // B is a subclass of A
+  class B < A {}
+  return B;
+}
+
+print f();
+"#,
+    "B\n"
+)]
+#[case(
+    r#"class Vehicle {}
+
+// Car is a subclass of Vehicle
+class Car < Vehicle {}
+
+// Sedan is a subclass of Car
+class Sedan < Car {}
+
+print Vehicle();
+print Car();
+print Sedan();
+
+{
+  // Truck is a subclass of Vehicle
+  class Truck < Vehicle {}
+  print Truck();
+}
+"#,
+    "Vehicle instance\nCar instance\nSedan instance\nTruck instance\n"
+)]
+fn test_class_hierarchy_success(#[case] source: &str, #[case] expected_stdout: &str) {
+    assert_success_output(source, expected_stdout);
+}
+
+#[rstest]
+#[case(
     r#"class Spaceship {}
 var falcon = Spaceship();
 
