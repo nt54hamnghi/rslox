@@ -5,6 +5,14 @@ use std::process::Command;
 use rstest::rstest;
 use tempdir::TempDir;
 
+fn cli_binary() -> PathBuf {
+    let mut path = std::env::current_exe().expect("should locate current test binary");
+    path.pop(); // test binary filename
+    path.pop(); // deps directory
+    path.push(format!("codecrafters-interpreter{}", std::env::consts::EXE_SUFFIX));
+    path
+}
+
 fn write_temp_lox(tempdir: &TempDir, source: &str) -> PathBuf {
     // Keep fixture creation in one place so each test only defines source text.
     let path = tempdir.path().join("test.lox");
@@ -17,8 +25,7 @@ fn run_source(source: &str) -> std::process::Output {
     let tempdir = TempDir::new("codecrafters-interpreter").expect("should create temp dir");
     let file = write_temp_lox(&tempdir, source);
 
-    // Cargo injects this env var for integration tests; it points to the built CLI binary.
-    Command::new(env!("CARGO_BIN_EXE_codecrafters-interpreter"))
+    Command::new(cli_binary())
         .arg("run")
         .arg(&file)
         .output()

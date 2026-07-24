@@ -196,7 +196,7 @@ impl<'src> TokenStream<'src> {
         {
             // unwrap is safe since peek returned Some('.')
             lexeme.push(self.chars.next().unwrap());
-            while let Some(current) = self.chars.next_if(char::is_ascii_alphanumeric) {
+            while let Some(current) = self.chars.next_if(char::is_ascii_digit) {
                 lexeme.push(current);
             }
         };
