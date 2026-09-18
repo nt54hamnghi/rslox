@@ -1,21 +1,17 @@
 [package]
-name = "codecrafters-interpreter"
+name = "rslox"
+description = "A Rust implementation of the Lox Virtual Machine"
 version = "0.1.0"
-authors = ["Codecrafters <hello@codecrafters.io>"]
+authors = ["Nghi Nguyen <hamnghi250699@gmail.com>"]
 edition = "2024"
-rust-version = "1.91"
 
 [dependencies]
-anyhow = "1.0.68"
-clap = { version = "4.5.58", features = ["derive"] }
+clap = { version = "4.6.7", features = ["derive"] }
 color-eyre = "0.6.5"
-dyn-clone = "1.0.20"
-slotmap = "1.1.1"
-thiserror = "1.0.38"
+thiserror = "2.0.20"
 
 [dev-dependencies]
-rstest = "0.26.1"
-tempdir = "0.3.7"
+rstest = "0.27.0"
 
 [lints.rust]
 unsafe_code = { priority = 5, level = "forbid" }

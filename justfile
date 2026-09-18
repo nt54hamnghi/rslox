@@ -2,36 +2,19 @@
 default:
     @just --list --unsorted
 
-# run a lox program
-run path="test.lox":
-    @./your_program.sh run {{ path }}
-
-alias r := run
-
 # format code
 fmt:
     cargo +nightly fmt
-
 alias f := fmt
 
-# test locally with cargo
-test-local:
-    @cargo test
+# lint code with clippy and rustfmt
+lint:
+    cargo clippy --all-targets -- -D clippy::all -W clippy::pedantic
+    cargo +nightly fmt --check
 
-alias tl := test-local
+alias l := lint
 
-# test remotely with codecrafters
-test-remote *args:
-    @codecrafters test {{ args }}
-
-alias tr := test-remote
-
-# submit to codecrafters
-submit message:
-    @cargo +nightly fmt
-    @jj describe --message "{{ message }}"
-    @jj bookmark move master
-    @jj git push --bookmark master --remote me
-    @jj git push --bookmark master --remote origin
-
-alias s := submit
+# run a lox program
+# run path="test.lox":
+#     @./your_program.sh run {{ path }}
+# alias r := run
