@@ -14,10 +14,16 @@ impl Chunk {
         } in self.iter()
         {
             print!("{offset:04} ");
+            if offset > 0 && self.lines[offset] == self.lines[offset - 1] {
+                print!("   | ");
+            } else {
+                print!("{:04} ", self.lines[offset]);
+            }
+
             match opcode {
                 OpCode::OP_CONSTANT => {
                     let index = operands.unwrap()[0] as usize;
-                    let value = self.values()[index];
+                    let value = &self.constants[index];
                     println!("{opcode:<16} {index:>4} {value}'");
                 }
                 OpCode::OP_RETURN => {
@@ -52,7 +58,7 @@ impl<'chunk> Iterator for ChunkIterator<'chunk> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let offset = self.offset;
-        let code = self.chunk.code();
+        let code = &self.chunk.code;
 
         let byte = *code.get(offset)?;
         match byte.try_into() {

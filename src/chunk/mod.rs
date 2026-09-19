@@ -4,6 +4,8 @@ use color_eyre::eyre::bail;
 
 use crate::value::Value;
 
+pub mod debug;
+
 #[allow(non_camel_case_types)]
 #[repr(u8)]
 #[derive(Debug)]
@@ -38,6 +40,7 @@ impl TryFrom<u8> for OpCode {
 pub struct Chunk {
     code: Vec<u8>,
     constants: Vec<Value>,
+    lines: Vec<usize>,
 }
 
 impl Chunk {
@@ -45,6 +48,7 @@ impl Chunk {
         Self {
             code: Vec::new(),
             constants: Vec::new(),
+            lines: Vec::new(),
         }
     }
 
@@ -56,12 +60,14 @@ impl Chunk {
         &self.constants
     }
 
-    pub fn write_opcode(&mut self, opcode: OpCode) {
+    pub fn write_opcode(&mut self, opcode: OpCode, line: usize) {
         self.code.push(opcode as u8);
+        self.lines.push(line);
     }
 
-    pub fn write_byte(&mut self, byte: u8) {
+    pub fn write_byte(&mut self, byte: u8, line: usize) {
         self.code.push(byte);
+        self.lines.push(line);
     }
 
     pub fn add_constant(&mut self, value: Value) -> usize {
