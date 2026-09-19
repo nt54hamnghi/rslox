@@ -1,10 +1,15 @@
 use rslox::chunk::Chunk;
-use rslox::chunk::OpCode::OP_RETURN;
+use rslox::chunk::OpCode::{OP_CONSTANT, OP_RETURN};
 
 fn main() -> color_eyre::Result<()> {
     let mut chunk = Chunk::new();
+
+    let index = chunk.add_constant(1.2);
+    chunk.write_opcode(OP_CONSTANT);
+    chunk.write_byte(index as u8);
     chunk.write_opcode(OP_RETURN);
-    chunk.write_byte(32);
+
+    // dbg!(&chunk);
     chunk.disasemble("test chunk");
 
     Ok(())
