@@ -4,13 +4,13 @@ default:
 
 # format code
 fmt:
-    cargo +nightly fmt
+    cargo fmt
 alias f := fmt
 
 # lint code with clippy and rustfmt
 lint:
     cargo clippy --all-targets -- -D clippy::all -W clippy::pedantic
-    cargo +nightly fmt --check
+    cargo fmt --check
 
 alias l := lint
 

@@ -12,3 +12,14 @@ tmp/
 
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
+
+# Devenv
+.devenv*
+devenv.local.nix
+devenv.local.yaml
+
+# direnv
+.direnv
+
+# pre-commit
+.pre-commit-config.yaml
