@@ -20,10 +20,10 @@ impl Chunk {
             operands,
         } = item;
         print!("{offset:04} ");
-        if offset > 0 && self.lines[offset] == self.lines[offset - 1] {
+        if offset > 0 && self.get_line(offset) == self.get_line(offset - 1) {
             print!("   | ");
         } else {
-            print!("{:04} ", self.lines[offset]);
+            print!("{:04} ", self.get_line(offset));
         }
 
         match opcode {
