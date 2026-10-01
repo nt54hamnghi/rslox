@@ -5,12 +5,25 @@ pub struct VM<'chunk> {
     chunk: &'chunk Chunk,
     // instruction pointer to the next instruction to exectuce
     ip: usize,
+    stack: Vec<Value>,
 }
 
 impl<'chunk> VM<'chunk> {
     pub fn interpret(chunk: &'chunk Chunk) -> InterpretResult {
-        let mut vm = VM { chunk, ip: 0 };
+        let mut vm = VM {
+            chunk,
+            ip: 0,
+            stack: Vec::new(),
+        };
         vm.run()
+    }
+
+    fn push(&mut self, value: Value) {
+        self.stack.push(value);
+    }
+
+    fn pop(&mut self) -> Option<Value> {
+        self.stack.pop()
     }
 
     // Reads the byte currently pointed at and advances the
@@ -47,15 +60,26 @@ impl<'chunk> VM<'chunk> {
                 // self.read_byte advances ip by 1, so ip currently
                 // no longer points to the opcode
                 self.chunk.disasemble_instruction(self.ip - 1, opcode);
+
+                print!("{:10}", "");
+                for v in self.stack.as_slice() {
+                    print!("[ {v} ]");
+                }
+                println!();
             }
             match opcode {
                 OpCode::OP_CONSTANT => {
                     let constant = self.read_constant();
-                    println!("{constant}");
+                    self.push(constant);
                 }
                 OpCode::OP_CONSTANT_LONG => {
                     let constant = self.read_long_constant();
-                    println!("{constant}");
+                    self.push(constant);
+                }
+                OpCode::OP_NEGATE => {
+                    // TODO: why unwrap here?
+                    let value = self.pop().unwrap();
+                    self.push(-value);
                 }
                 OpCode::OP_RETURN => return INTERPRET_OK,
             }

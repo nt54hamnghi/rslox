@@ -14,15 +14,17 @@ pub enum OpCode {
     OP_CONSTANT,
     // Load a constant using a 24-bit index.
     OP_CONSTANT_LONG,
+    OP_NEGATE,
     OP_RETURN,
 }
 
 impl Display for OpCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            Self::OP_CONSTANT => "OP_CONSTANT",
-            Self::OP_CONSTANT_LONG => "OP_CONSTANT_LONG",
-            Self::OP_RETURN => "OP_RETURN",
+            OpCode::OP_CONSTANT => "OP_CONSTANT",
+            OpCode::OP_CONSTANT_LONG => "OP_CONSTANT_LONG",
+            OpCode::OP_NEGATE => "OP_NEGATE",
+            OpCode::OP_RETURN => "OP_RETURN",
         };
         f.pad(s)
     }
@@ -35,7 +37,8 @@ impl TryFrom<u8> for OpCode {
         match value {
             0 => Ok(Self::OP_CONSTANT),
             1 => Ok(Self::OP_CONSTANT_LONG),
-            2 => Ok(Self::OP_RETURN),
+            2 => Ok(Self::OP_NEGATE),
+            3 => Ok(Self::OP_RETURN),
             _ => bail!("unknown opcode"),
         }
     }
@@ -186,7 +189,8 @@ mod tests {
     #[rstest]
     #[case(OpCode::OP_CONSTANT, 0, "OP_CONSTANT")]
     #[case(OpCode::OP_CONSTANT_LONG, 1, "OP_CONSTANT_LONG")]
-    #[case(OpCode::OP_RETURN, 2, "OP_RETURN")]
+    #[case(OpCode::OP_NEGATE, 2, "OP_NEGATE")]
+    #[case(OpCode::OP_RETURN, 3, "OP_RETURN")]
     fn opcode_has_the_expected_byte_and_display_name(
         #[case] opcode: OpCode,
         #[case] byte: u8,
@@ -199,7 +203,8 @@ mod tests {
     #[rstest]
     #[case(0, OpCode::OP_CONSTANT)]
     #[case(1, OpCode::OP_CONSTANT_LONG)]
-    #[case(2, OpCode::OP_RETURN)]
+    #[case(2, OpCode::OP_NEGATE)]
+    #[case(3, OpCode::OP_RETURN)]
     fn opcode_can_be_converted_from_its_byte(#[case] byte: u8, #[case] expected: OpCode) {
         assert_eq!(OpCode::try_from(byte).unwrap(), expected);
     }
