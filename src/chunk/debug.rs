@@ -7,10 +7,11 @@ impl Chunk {
     }
 
     pub fn disasemble(&self, name: &str) {
-        println!("== {name} ==");
+        println!("=={name:^16}==");
         for (offset, opcode) in self.iter() {
             self.disasemble_instruction(offset, opcode);
         }
+        println!("{}\n", "=".repeat(20));
     }
 
     pub fn disasemble_instruction(&self, offset: usize, opcode: OpCode) {

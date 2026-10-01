@@ -18,16 +18,19 @@ impl<'chunk> VM<'chunk> {
         vm.run()
     }
 
+    /// Pushes a value onto the top of the VM's stack.
     fn push(&mut self, value: Value) {
         self.stack.push(value);
     }
 
+    /// Pops and returns the value at the top of the VM's stack.
+    /// Returns `None` if the stack is empty.
     fn pop(&mut self) -> Option<Value> {
         self.stack.pop()
     }
 
-    // Reads the byte currently pointed at and advances the
-    // instruction pointer
+    /// Reads the byte currently pointed at and advances the
+    /// instruction pointer
     fn read_byte(&mut self) -> u8 {
         let byte = self.chunk.code()[self.ip];
         self.ip += 1;
@@ -52,6 +55,10 @@ impl<'chunk> VM<'chunk> {
 
         macro_rules! binary_op {
             ($op:tt) => {{
+                // A binary operation expects its two operands on the stack.
+                // If the stack contains fewer than two values, something went
+                // wrong during compilation: the compiler should have rejected
+                // the invalid expression before the VM started executing.
                 let b = self.pop().unwrap();
                 let a = self.pop().unwrap();
                 self.push(a $op b);
@@ -63,18 +70,15 @@ impl<'chunk> VM<'chunk> {
             // being unable to convert into an opcode indicates
             // bugs in bytecode walking logic
             let opcode = OpCode::try_from(byte).expect("a valid opcode");
+
             #[cfg(feature = "trace")]
             {
                 // self.read_byte advances ip by 1, so ip currently
                 // no longer points to the opcode
                 self.chunk.disasemble_instruction(self.ip - 1, opcode);
-
-                print!("{:10}", "");
-                for v in self.stack.as_slice() {
-                    print!("[ {v} ]");
-                }
-                println!();
+                self.debug_stack();
             }
+
             match opcode {
                 OpCode::OP_CONSTANT => {
                     let constant = self.read_constant();
@@ -89,7 +93,10 @@ impl<'chunk> VM<'chunk> {
                 OpCode::OP_MULTIPLY => binary_op!(*),
                 OpCode::OP_DIVIDE => binary_op!(/),
                 OpCode::OP_NEGATE => {
-                    // TODO: why unwrap here?
+                    // OP_NEGATE expects a value on the stack.
+                    // If the stack is empty, something went wrong during compilation:
+                    // the compiler should have rejected the invalid expression before
+                    // the VM started executing.
                     let value = self.pop().unwrap();
                     self.push(-value);
                 }
@@ -100,6 +107,15 @@ impl<'chunk> VM<'chunk> {
             }
         }
     }
+
+    #[allow(unused)]
+    fn debug_stack(&self) {
+        print!("{:10}", "");
+        for v in self.stack.as_slice() {
+            print!("[ {v} ]");
+        }
+        println!();
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -108,4 +124,106 @@ pub enum InterpretResult {
     INTERPRET_OK,
     INTERPRET_COMPILE_ERROR,
     INTERPRET_RUNTIME_ERROR,
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use super::VM;
+    use crate::chunk::Chunk;
+
+    impl<'chunk> VM<'chunk> {
+        fn new(chunk: &'chunk Chunk) -> VM<'chunk> {
+            VM {
+                chunk,
+                ip: 0,
+                stack: Vec::new(),
+            }
+        }
+    }
+
+    #[test]
+    fn push_appends_values_to_the_top_of_the_stack() {
+        let chunk = Chunk::new();
+        let mut vm = VM::new(&chunk);
+
+        vm.push(1.5);
+        vm.push(-2.0);
+
+        assert_eq!(vm.stack, [1.5, -2.0]);
+    }
+
+    #[test]
+    fn pop_removes_values_in_last_in_first_out_order() {
+        let chunk = Chunk::new();
+        let mut vm = VM::new(&chunk);
+        vm.stack = vec![1.5, -2.0];
+
+        assert_eq!(vm.pop(), Some(-2.0));
+        assert_eq!(vm.stack, [1.5]);
+
+        assert_eq!(vm.pop(), Some(1.5));
+        assert!(vm.stack.is_empty());
+
+        assert_eq!(vm.pop(), None);
+    }
+
+    #[test]
+    fn pop_returns_none_for_an_empty_stack() {
+        let chunk = Chunk::new();
+        let mut vm = VM::new(&chunk);
+
+        assert_eq!(vm.pop(), None);
+        assert!(vm.stack.is_empty());
+    }
+
+    #[rstest]
+    #[case(0, 42)]
+    #[case(1, 0)]
+    #[case(2, 255)]
+    fn read_byte_reads_from_the_current_position_and_advances(
+        #[case] position: usize,
+        #[case] expected: u8,
+    ) {
+        let mut chunk = Chunk::new();
+        for byte in [42, 0, 255] {
+            chunk.write_byte(byte, 1);
+        }
+        let mut vm = VM::new(&chunk);
+        vm.ip = position;
+
+        assert_eq!(vm.read_byte(), expected);
+        assert_eq!(vm.ip, position + 1);
+    }
+
+    #[rstest]
+    #[case(0, 1.5)]
+    #[case(1, -2.0)]
+    fn read_constant_returns_the_indexed_value(#[case] index: u8, #[case] expected: f64) {
+        let mut chunk = Chunk::new();
+        chunk.add_constant(1.5);
+        chunk.add_constant(-2.0);
+        chunk.write_byte(index, 1);
+        let mut vm = VM::new(&chunk);
+
+        assert_eq!(vm.read_constant(), expected);
+        assert_eq!(vm.ip, 1);
+    }
+
+    #[rstest]
+    #[case(0, 1.5)]
+    #[case(1, -2.0)]
+    fn read_long_constant_returns_the_indexed_value(#[case] index: u8, #[case] expected: f64) {
+        let mut chunk = Chunk::new();
+        chunk.add_constant(1.5);
+        chunk.add_constant(-2.0);
+        chunk.write_byte(index, 1);
+        chunk.write_byte(0, 1);
+        chunk.write_byte(0, 1);
+        let mut vm = VM::new(&chunk);
+
+        assert_eq!(vm.read_long_constant(), expected);
+        assert_eq!(vm.ip, 3);
+    }
 }
