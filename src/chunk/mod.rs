@@ -165,6 +165,16 @@ impl Chunk {
     }
 }
 
+/// Reads a 24-bit unsigned integer from three little-endian bytes.
+///
+/// # Panics
+///
+/// Panics if `bytes` does not contain exactly three bytes.
+pub fn decode_u24_le(bytes: &[u8]) -> usize {
+    let [low, mid, high] = bytes.try_into().expect("bytes to have length of 3");
+    u32::from_le_bytes([low, mid, high, 0]) as usize
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;

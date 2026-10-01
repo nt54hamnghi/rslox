@@ -1,4 +1,4 @@
-use crate::chunk::{Chunk, OpCode};
+use crate::chunk::{Chunk, OpCode, decode_u24_le};
 
 impl Chunk {
     #[must_use]
@@ -8,17 +8,12 @@ impl Chunk {
 
     pub fn disasemble(&self, name: &str) {
         println!("== {name} ==");
-        for item in self.iter() {
-            self.disasemble_instruction(item);
+        for (offset, opcode) in self.iter() {
+            self.disasemble_instruction(offset, opcode);
         }
     }
 
-    pub fn disasemble_instruction(&self, item: ChunkItem<'_>) {
-        let ChunkItem {
-            offset,
-            opcode,
-            operands,
-        } = item;
+    pub fn disasemble_instruction(&self, offset: usize, opcode: OpCode) {
         print!("{offset:04} ");
         if offset > 0 && self.get_line(offset) == self.get_line(offset - 1) {
             print!("   | ");
@@ -28,14 +23,14 @@ impl Chunk {
 
         match opcode {
             OpCode::OP_CONSTANT => {
-                let index = operands.unwrap()[0] as usize;
-                let value = &self.constants[index];
+                let index = self.code[offset + 1] as usize;
+                let value = self.constants[index];
                 println!("{opcode:<18} {index:>4} {value}");
             }
             OpCode::OP_CONSTANT_LONG => {
-                let [low, mid, high] = operands.unwrap().try_into().unwrap();
-                let index = u32::from_le_bytes([low, mid, high, 0]) as usize;
-                let value = &self.constants[index];
+                let bytes = &self.code[offset + 1..=offset + 3];
+                let index = decode_u24_le(bytes);
+                let value = self.constants[index];
                 println!("{opcode:<18} {index:>4} {value}");
             }
             OpCode::OP_RETURN => {
@@ -57,15 +52,8 @@ impl<'chunk> ChunkIterator<'chunk> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct ChunkItem<'chunk> {
-    offset: usize,
-    opcode: OpCode,
-    operands: Option<&'chunk [u8]>,
-}
-
 impl<'chunk> Iterator for ChunkIterator<'chunk> {
-    type Item = ChunkItem<'chunk>;
+    type Item = (usize, OpCode); // (offset, opcode)
 
     fn next(&mut self) -> Option<Self::Item> {
         let offset = self.offset;
@@ -81,29 +69,15 @@ impl<'chunk> Iterator for ChunkIterator<'chunk> {
         match opcode {
             OpCode::OP_CONSTANT => {
                 self.offset = offset + 2;
-                let operands = &code[offset + 1..=offset + 1];
-                Some(ChunkItem {
-                    offset,
-                    opcode,
-                    operands: Some(operands),
-                })
+                Some((offset, opcode))
             }
             OpCode::OP_CONSTANT_LONG => {
                 self.offset = offset + 4;
-                let operands = &code[offset + 1..=offset + 3];
-                Some(ChunkItem {
-                    offset,
-                    opcode,
-                    operands: Some(operands),
-                })
+                Some((offset, opcode))
             }
             OpCode::OP_RETURN => {
                 self.offset = offset + 1;
-                Some(ChunkItem {
-                    offset,
-                    opcode,
-                    operands: None,
-                })
+                Some((offset, opcode))
             }
         }
     }
@@ -111,7 +85,7 @@ impl<'chunk> Iterator for ChunkIterator<'chunk> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ChunkItem, OpCode};
+    use super::OpCode;
     use crate::chunk::Chunk;
 
     #[test]
@@ -125,12 +99,12 @@ mod tests {
     fn iterator_decodes_constant_instruction() {
         let mut chunk = Chunk::new();
         chunk.write_constant(1.5, 0);
-        let items: Vec<ChunkItem<'_>> = chunk.iter().collect();
+        let items: Vec<(usize, OpCode)> = chunk.iter().collect();
 
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].offset, 0);
-        assert_eq!(items[0].opcode, OpCode::OP_CONSTANT);
-        assert_eq!(items[0].operands, Some(&[0_u8] as &[u8]));
+        let (offset, opcode) = items[0];
+        assert_eq!(offset, 0);
+        assert_eq!(opcode, OpCode::OP_CONSTANT);
     }
 
     #[test]
@@ -138,24 +112,24 @@ mod tests {
         let mut chunk = Chunk::new();
         chunk.constants.resize(256, 0.0);
         chunk.write_constant(1.5, 0);
-        let items: Vec<ChunkItem<'_>> = chunk.iter().collect();
+        let items: Vec<(usize, OpCode)> = chunk.iter().collect();
 
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].offset, 0);
-        assert_eq!(items[0].opcode, OpCode::OP_CONSTANT_LONG);
-        assert_eq!(items[0].operands, Some(&[0u8, 1, 0] as &[u8]));
+        let (offset, opcode) = items[0];
+        assert_eq!(offset, 0);
+        assert_eq!(opcode, OpCode::OP_CONSTANT_LONG);
     }
 
     #[test]
     fn iterator_decodes_return_instruction() {
         let mut chunk = Chunk::new();
         chunk.write_opcode(OpCode::OP_RETURN, 0);
-        let items: Vec<ChunkItem<'_>> = chunk.iter().collect();
+        let items: Vec<(usize, OpCode)> = chunk.iter().collect();
 
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].offset, 0);
-        assert_eq!(items[0].opcode, OpCode::OP_RETURN);
-        assert_eq!(items[0].operands, None);
+        let (offset, opcode) = items[0];
+        assert_eq!(offset, 0);
+        assert_eq!(opcode, OpCode::OP_RETURN);
     }
 
     #[test]
@@ -164,11 +138,11 @@ mod tests {
         chunk.write_byte(u8::MAX, 10);
         chunk.write_opcode(OpCode::OP_RETURN, 11);
 
-        let items: Vec<ChunkItem<'_>> = chunk.iter().collect();
+        let items: Vec<(usize, OpCode)> = chunk.iter().collect();
 
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].offset, 1);
-        assert_eq!(items[0].opcode, OpCode::OP_RETURN);
-        assert_eq!(items[0].operands, None);
+        let (offset, opcode) = items[0];
+        assert_eq!(offset, 1);
+        assert_eq!(opcode, OpCode::OP_RETURN);
     }
 }
