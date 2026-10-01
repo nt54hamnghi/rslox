@@ -50,6 +50,14 @@ impl<'chunk> VM<'chunk> {
     fn run(&mut self) -> InterpretResult {
         use self::InterpretResult::INTERPRET_OK;
 
+        macro_rules! binary_op {
+            ($op:tt) => {{
+                let b = self.pop().unwrap();
+                let a = self.pop().unwrap();
+                self.push(a $op b);
+            }};
+        }
+
         loop {
             let byte = self.read_byte();
             // being unable to convert into an opcode indicates
@@ -76,12 +84,19 @@ impl<'chunk> VM<'chunk> {
                     let constant = self.read_long_constant();
                     self.push(constant);
                 }
+                OpCode::OP_ADD => binary_op!(+),
+                OpCode::OP_SUBTRACT => binary_op!(-),
+                OpCode::OP_MULTIPLY => binary_op!(*),
+                OpCode::OP_DIVIDE => binary_op!(/),
                 OpCode::OP_NEGATE => {
                     // TODO: why unwrap here?
                     let value = self.pop().unwrap();
                     self.push(-value);
                 }
-                OpCode::OP_RETURN => return INTERPRET_OK,
+                OpCode::OP_RETURN => {
+                    println!("{}", self.pop().unwrap());
+                    return INTERPRET_OK;
+                }
             }
         }
     }

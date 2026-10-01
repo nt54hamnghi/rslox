@@ -6,6 +6,9 @@ fn main() -> color_eyre::Result<()> {
 
     chunk.write_constant(1.2, 1);
     chunk.write_constant(3.4, 1);
+    chunk.write_opcode(OpCode::OP_ADD, 1);
+    chunk.write_constant(5.6, 1);
+    chunk.write_opcode(OpCode::OP_DIVIDE, 1);
     chunk.write_opcode(OpCode::OP_RETURN, 2);
     // chunk.disasemble("test");
 

@@ -33,7 +33,12 @@ impl Chunk {
                 let value = self.constants[index];
                 println!("{opcode:<18} {index:>4} {value}");
             }
-            OpCode::OP_NEGATE | OpCode::OP_RETURN => {
+            OpCode::OP_ADD
+            | OpCode::OP_SUBTRACT
+            | OpCode::OP_MULTIPLY
+            | OpCode::OP_DIVIDE
+            | OpCode::OP_NEGATE
+            | OpCode::OP_RETURN => {
                 println!("{opcode}");
             }
         }
@@ -75,7 +80,12 @@ impl<'chunk> Iterator for ChunkIterator<'chunk> {
                 self.offset = offset + 4;
                 Some((offset, opcode))
             }
-            OpCode::OP_NEGATE | OpCode::OP_RETURN => {
+            OpCode::OP_ADD
+            | OpCode::OP_SUBTRACT
+            | OpCode::OP_MULTIPLY
+            | OpCode::OP_DIVIDE
+            | OpCode::OP_NEGATE
+            | OpCode::OP_RETURN => {
                 self.offset = offset + 1;
                 Some((offset, opcode))
             }
