@@ -1,4 +1,4 @@
 pub mod chunk;
-pub mod common;
+mod stack;
 pub mod value;
 pub mod vm;
