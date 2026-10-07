@@ -1,22 +1,52 @@
+use std::fs;
+use std::io::{self, BufRead, Write};
+use std::path::{Path, PathBuf};
+use std::process::exit;
+
+use clap::Parser;
 use rslox::chunk::{Chunk, OpCode};
+use rslox::errors::Error;
 use rslox::vm::VM;
 
-fn main() -> color_eyre::Result<()> {
-    let mut chunk = Chunk::new();
+#[derive(Debug, Parser)]
+struct Cli {
+    path: Option<PathBuf>,
+}
 
-    chunk.write_constant(4.0, 1);
-    chunk.write_constant(3.0, 1);
-    chunk.write_constant(2.0, 1);
-    chunk.write_opcode(OpCode::OP_NEGATE, 1);
-    chunk.write_opcode(OpCode::OP_MULTIPLY, 1);
-    chunk.write_opcode(OpCode::OP_SUBTRACT, 1);
-    chunk.write_opcode(OpCode::OP_RETURN, 2);
-    #[cfg(feature = "trace")]
-    {
-        chunk.disasemble("test");
+fn main() -> color_eyre::Result<()> {
+    let cli = Cli::parse();
+
+    match cli.path {
+        Some(path) => run_file(path),
+        None => repl(),
+    }
+}
+
+fn repl() -> color_eyre::Result<()> {
+    let mut stdin = io::stdin().lock();
+    let mut buf = String::new();
+
+    loop {
+        print!("> ");
+        io::stdout().flush()?;
+        // read_line return Ok(0) on EOF and Ctrl+D sends EOF
+        if stdin.read_line(&mut buf)? == 0 {
+            break;
+        }
+        VM::interpret(buf.trim_end());
+        buf.clear();
     }
 
-    VM::interpret(&chunk);
-
     Ok(())
+}
+
+fn run_file(path: impl AsRef<Path>) -> color_eyre::Result<()> {
+    let src = fs::read_to_string(path)?;
+    match VM::interpret(&src) {
+        Ok(_) => Ok(()),
+        Err(err) => match err {
+            Error::Compile => exit(65),
+            Error::Runtime => exit(70),
+        },
+    }
 }

@@ -19,7 +19,7 @@ rstest = "0.27.0"
 
 [lints.rust]
 # unsafe_code = { priority = 5, level = "forbid" }
-# unused = { priority = -1, level = "allow" }
+unused = { priority = -1, level = "allow" }
 
 [profile.dev.package.backtrace]
 opt-level = 3

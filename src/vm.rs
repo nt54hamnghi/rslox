@@ -1,4 +1,5 @@
 use crate::chunk::{Chunk, OpCode, decode_u24_le};
+use crate::errors::Error;
 use crate::stack::Stack;
 use crate::value::Value;
 
@@ -6,17 +7,20 @@ pub struct VM<'chunk> {
     chunk: &'chunk Chunk,
     // instruction pointer to the next instruction to exectuce
     ip: usize,
-    stack: Stack<Value, 256>,
+    stack: Stack<Value, 512>,
 }
 
 impl<'chunk> VM<'chunk> {
-    pub fn interpret(chunk: &'chunk Chunk) -> InterpretResult {
-        let mut vm = VM {
+    pub fn new(chunk: &'chunk Chunk, ip: usize) -> VM<'chunk> {
+        VM {
             chunk,
-            ip: 0,
+            ip,
             stack: Stack::new(),
-        };
-        vm.run()
+        }
+    }
+
+    pub fn interpret(src: &str) -> Result<(), Error> {
+        Ok(())
     }
 
     /// Reads the byte currently pointed at and advances the
@@ -40,9 +44,7 @@ impl<'chunk> VM<'chunk> {
         self.chunk.values()[idx]
     }
 
-    fn run(&mut self) -> InterpretResult {
-        use self::InterpretResult::INTERPRET_OK;
-
+    fn run(&mut self) -> Result<(), Error> {
         macro_rules! binary_op {
             ($op:tt) => {{
                 // A binary operation expects its two operands on the stack.
@@ -92,7 +94,7 @@ impl<'chunk> VM<'chunk> {
                 }
                 OpCode::OP_RETURN => {
                     println!("{}", self.stack.pop().unwrap());
-                    return INTERPRET_OK;
+                    return Ok(());
                 }
             }
         }
@@ -108,30 +110,12 @@ impl<'chunk> VM<'chunk> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(non_camel_case_types)]
-pub enum InterpretResult {
-    INTERPRET_OK,
-    INTERPRET_COMPILE_ERROR,
-    INTERPRET_RUNTIME_ERROR,
-}
-
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
 
     use super::VM;
     use crate::{chunk::Chunk, stack::Stack};
-
-    impl<'chunk> VM<'chunk> {
-        fn new(chunk: &'chunk Chunk) -> VM<'chunk> {
-            VM {
-                chunk,
-                ip: 0,
-                stack: Stack::new(),
-            }
-        }
-    }
 
     #[rstest]
     #[case(0, 42)]
@@ -145,7 +129,7 @@ mod tests {
         for byte in [42, 0, 255] {
             chunk.write_byte(byte, 1);
         }
-        let mut vm = VM::new(&chunk);
+        let mut vm = VM::new(&chunk, 0);
         vm.ip = position;
 
         assert_eq!(vm.read_byte(), expected);
@@ -160,7 +144,7 @@ mod tests {
         chunk.add_constant(1.5);
         chunk.add_constant(-2.0);
         chunk.write_byte(index, 1);
-        let mut vm = VM::new(&chunk);
+        let mut vm = VM::new(&chunk, 0);
 
         assert_eq!(vm.read_constant(), expected);
         assert_eq!(vm.ip, 1);
@@ -176,7 +160,7 @@ mod tests {
         chunk.write_byte(index, 1);
         chunk.write_byte(0, 1);
         chunk.write_byte(0, 1);
-        let mut vm = VM::new(&chunk);
+        let mut vm = VM::new(&chunk, 0);
 
         assert_eq!(vm.read_long_constant(), expected);
         assert_eq!(vm.ip, 3);
