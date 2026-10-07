@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 
 use clap::Parser;
-use rslox::chunk::{Chunk, OpCode};
 use rslox::errors::Error;
 use rslox::vm::VM;
 
@@ -41,8 +40,8 @@ fn repl() -> color_eyre::Result<()> {
 }
 
 fn run_file(path: impl AsRef<Path>) -> color_eyre::Result<()> {
-    let src = fs::read_to_string(path)?;
-    match VM::interpret(&src) {
+    let source = fs::read_to_string(path)?;
+    match VM::interpret(&source) {
         Ok(_) => Ok(()),
         Err(err) => match err {
             Error::Compile => exit(65),

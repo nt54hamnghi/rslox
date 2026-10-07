@@ -1,4 +1,5 @@
 use crate::chunk::{Chunk, OpCode, decode_u24_le};
+use crate::compiler::compile;
 use crate::errors::Error;
 use crate::stack::Stack;
 use crate::value::Value;
@@ -19,7 +20,8 @@ impl<'chunk> VM<'chunk> {
         }
     }
 
-    pub fn interpret(src: &str) -> Result<(), Error> {
+    pub fn interpret(source: &str) -> Result<(), Error> {
+        compile(source);
         Ok(())
     }
 

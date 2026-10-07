@@ -1,7 +1,7 @@
-pub mod chunk;
+mod chunk;
 mod compiler;
 pub mod errors;
 mod scanner;
 mod stack;
-pub mod value;
+mod value;
 pub mod vm;
