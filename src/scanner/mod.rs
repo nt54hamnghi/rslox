@@ -111,7 +111,7 @@ impl<'source> Scanner<'source> {
     fn peek_next_char(&mut self) -> Option<(usize, char)> {
         let mut clone = self.chars.clone();
         clone.next()?;
-        clone.peek().copied()
+        clone.next()
     }
 
     /// Creates a token spanning from the current token's starting offset to `end`.

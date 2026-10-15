@@ -2,6 +2,14 @@ use std::fmt::Debug;
 use std::mem::MaybeUninit;
 use std::slice;
 
+// Representation invariants:
+// 1. `top <= N`
+// 2. Slots in `inner[..top]` contain initialized `T` values.
+// 3. Slots in `inner[top..]` are treated as uninitialized and
+// must not be read or dropped as `T`.
+// 4. Each initialized value is owned by exactly one live stack
+// slot. Popping transfers ownership to the caller and removes
+// the slot from the initialized prefix.
 pub struct Stack<T, const N: usize> {
     inner: [MaybeUninit<T>; N],
     top: usize,
@@ -17,12 +25,12 @@ impl<T, const N: usize> Stack<T, N> {
 
     pub fn as_slice(&self) -> &[T] {
         debug_assert!(self.len() <= N);
-        // SAFETY: MaybeUninit<T> has the same size and alignment as T, and
-        // self.inner is non-null and valid for reads for self.len() elements.
-        // Every T in the slice is initialized because self.len() increases only
-        // when push writes an element and decreases when pop reads one out, so
-        // the first self.len() slots are always initialized. The returned slice
-        // borrows self, so the memory can't be mutated while the slice is alive.
+        // SAFETY:
+        // `MaybeUninit<T>` has the same size and alignment as `T`, and
+        // every slot below `top` contains an initialized `T`.
+        //
+        // The returned slice borrows `self`, so the memory cannot be
+        // mutated/dropped while the slice is alive.
         unsafe { slice::from_raw_parts(self.inner.as_ptr().cast(), self.len()) }
     }
 
@@ -39,6 +47,7 @@ impl<T, const N: usize> Stack<T, N> {
             .get_mut(self.top)
             .ok_or(StackOverflow(N))?
             .write(value);
+
         self.top += 1;
         Ok(())
     }
@@ -49,12 +58,14 @@ impl<T, const N: usize> Stack<T, N> {
         }
         self.top -= 1;
 
-        // SAFETY: every slot below self.top is initialized by a prior push, and
-        // we have already checked that the stack is non-empty before decrementing
-        // self.top, so indexing with it returns an initialized item. Returning a
-        // bitwise copy with assume_init_read is safe because the old data will be
-        // overwritten by push (via MaybeUninit::write), which doesn't drop the
-        // existing T, so we won't have a double drop.
+        // SAFETY:
+        // By the type invariant, after `top` is decremented, the slot at
+        // `top`is considered uninitialized.
+        //
+        // `assume_init_read` returns a bitwise copy whose ownership is
+        // transferred to the caller. A subsequent push will overwrite the
+        // slot at `top` with `MaybeUninit::write`, which doesn't drop the
+        // existing `T`, so there won't be a double drop.
         let value = unsafe { self.inner[self.top].assume_init_read() };
         Some(value)
     }
@@ -68,8 +79,8 @@ impl<T: Debug, const N: usize> Debug for Stack<T, N> {
 
 impl<T, const N: usize> Drop for Stack<T, N> {
     fn drop(&mut self) {
-        // SAFETY: The first `top` slots contain initialized values.
-        // The remaining slots must not be dropped as T
+        // SAFETY: Visit only the initialized values below `top`
+        // so that moved/popped values are not dropped twice.
         let len = self.len();
         for elem in &mut self.inner[0..len] {
             unsafe {
