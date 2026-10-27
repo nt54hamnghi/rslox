@@ -104,7 +104,7 @@ impl Chunk {
 
         if !self.lines.is_empty() {
             let last = self.lines.last().unwrap();
-            assert!(line >= last.line);
+            debug_assert!(line >= last.line);
             if last.line == line {
                 return;
             }

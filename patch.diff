@@ -1,0 +1,438 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 485b54a644..8d0c99f6fe 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -18,8 +18,11 @@
+ rstest = "0.27.0"
+ 
+ [lints.rust]
+-# unsafe_code = { priority = 5, level = "forbid" }
+-unused = { priority = -1, level = "allow" }
++unused = { priority = 0, level = "allow" }
++non_camel_case_types = { priority = 0, level = "allow" }
++
++[lints.clippy]
++upper_case_acronyms = { priority = 0, level = "allow" }
+ 
+ [profile.dev.package.backtrace]
+ opt-level = 3
+diff --git a/src/chunk/mod.rs b/src/chunk/mod.rs
+index 336f252288..58ff910bc7 100644
+--- a/src/chunk/mod.rs
++++ b/src/chunk/mod.rs
+@@ -104,7 +104,7 @@ pub fn write_byte(&mut self, byte: u8, line: usize) {
+ 
+         if !self.lines.is_empty() {
+             let last = self.lines.last().unwrap();
+-            assert!(line >= last.line);
++            debug_assert!(line >= last.line);
+             if last.line == line {
+                 return;
+             }
+diff --git a/src/compiler.rs b/src/compiler.rs
+index 96e38c68ea..45f664a0d8 100644
+--- a/src/compiler.rs
++++ b/src/compiler.rs
+@@ -1,8 +1,183 @@ pub fn compile(source: &str, chunk: &mut Chunk) -> Result<(), Error> {
+-use crate::chunk::Chunk;
++use std::iter::Peekable;
++
++use color_eyre::eyre::OptionExt;
++
++use crate::chunk::{Chunk, OpCode};
+ use crate::errors::Error;
+ use crate::scanner::Scanner;
++use crate::scanner::token::{Token, TokenType};
++use crate::value::Value;
+ 
+ pub fn compile(source: &str, chunk: &mut Chunk) -> Result<(), Error> {
+-    let scanner = Scanner::new(source);
++    let parser = Parser::new(source, chunk);
+     Ok(())
+ }
++
++#[derive(Debug)]
++struct Parser<'source, 'chunk> {
++    source: &'source str,
++    scanner: Peekable<Scanner<'source>>,
++    chunk: &'chunk mut Chunk,
++    /// The most recently consumed token, or `None` before parsing begins.
++    previous: Option<Token>,
++}
++
++impl<'source, 'chunk> Parser<'source, 'chunk> {
++    fn new(source: &'source str, chunk: &'chunk mut Chunk) -> Self {
++        let scanner = Scanner::new(source);
++        Self {
++            source,
++            scanner: scanner.peekable(),
++            chunk,
++            previous: None,
++        }
++    }
++
++    fn expression(&mut self) {}
++
++    fn parse_binding_power(&mut self, min_bp: u8) -> color_eyre::Result<()> {
++        let token = self.next().ok_or_eyre("unexpected end of token streams")?;
++        self.previous = Some(token);
++
++        // parsing lhs
++        match token.typ() {
++            TokenType::NUMBER => self.number(),
++            _ => todo!(),
++        };
++
++        loop {
++            let op = self.peek().ok_or_eyre("unexpected end of token streams")?;
++            let prec = match op.typ() {
++                TokenType::EOF => break,
++                _ => Precedence::from(op),
++            };
++            let (lbp, rbp) = prec.infix_binding_power();
++            if lbp < min_bp {
++                break;
++            }
++            // advance pass the operator
++            self.next().unwrap();
++            // parse rhs
++            self.parse_binding_power(rbp)?;
++        }
++
++        Ok(())
++    }
++
++    fn number(&mut self) {
++        // assume the token for the number literal has already been consumed
++        let token = self.previous.unwrap();
++        debug_assert_eq!(token.typ(), TokenType::NUMBER);
++
++        let lexeme = token.lexeme(self.source);
++        // the scanner only produces NUMBER tokens for valid numeric literals
++        let value = lexeme.parse::<f64>().unwrap();
++        self.emit_constant(value);
++    }
++
++    fn next(&mut self) -> Option<Token> {
++        while let Some(Err(err)) = self.scanner.peek() {
++            eprintln!("{err}");
++            self.scanner.next();
++        }
++        // the loop skips errors, leaving an Ok token, so unwrapping is safe
++        self.scanner.next().transpose().unwrap()
++    }
++
++    fn peek(&mut self) -> Option<Token> {
++        while let Some(Err(err)) = self.scanner.peek() {
++            eprintln!("{err}");
++            self.scanner.next();
++        }
++        // the loop skips errors, leaving an Ok token, so unwrapping is safe
++        let Ok(token) = self.scanner.peek()? else {
++            unreachable!()
++        };
++        Some(*token)
++    }
++
++    fn emit_byte(&mut self, byte: u8) {
++        // bytecode is emitted only while compiling a previously consumed token,
++        // so `previous` is guaranteed to be `Some` here.
++        let line = self.previous.unwrap().line();
++        self.chunk.write_byte(byte, line);
++    }
++
++    fn emit_opcode(&mut self, opcode: OpCode) {
++        self.emit_byte(opcode as u8);
++    }
++
++    fn emit_bytes(&mut self, bytes: impl IntoIterator<Item = u8>) {
++        for b in bytes {
++            self.emit_byte(b);
++        }
++    }
++
++    fn emit_constant(&mut self, value: Value) {
++        // bytecode is emitted only while compiling a previously consumed token,
++        // so `previous` is guaranteed to be `Some` here.
++        let line = self.previous.unwrap().line();
++        self.chunk.write_constant(value, line);
++    }
++}
++
++#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
++#[repr(u8)]
++enum Precedence {
++    NONE = 1,
++    ASSIGNMENT = 3,
++    OR = 5,
++    AND = 7,
++    EQUALITY = 9,
++    COMPARISON = 11,
++    TERM = 13,
++    FACTOR = 15,
++    UNARY = 17,
++    CALL = 19,
++    PRIMARY = 21,
++}
++
++impl Precedence {
++    fn prefix_binding_power(&self) -> ((), u8) {
++        match self {
++            Precedence::UNARY => {
++                let bp = *self as u8;
++                ((), bp)
++            }
++            _ => panic!("unknown prefix operator"),
++        }
++    }
++
++    fn infix_binding_power(&self) -> (u8, u8) {
++        match self {
++            Precedence::ASSIGNMENT | Precedence::TERM | Precedence::FACTOR => {
++                let bp = *self as u8;
++                (bp, bp + 1)
++            }
++            _ => panic!("unknown prefix operator"),
++        }
++    }
++}
++
++impl From<Token> for Precedence {
++    fn from(value: Token) -> Self {
++        match value.typ() {
++            TokenType::PLUS | TokenType::MINUS => Self::TERM,
++            TokenType::STAR | TokenType::SLASH => Self::FACTOR,
++            _ => Self::NONE,
++        }
++    }
++}
++
++// fn error_at_token(&self, token: &Token, msg: impl AsRef<str>) {
++//     let msg = msg.as_ref();
++//     let mut out = format!("[line {}] Error ", token.line());
++//     match token.typ() {
++//         TokenType::EOF => out.push_str("at end: {message}"),
++//         _ => {
++//             let lexeme = token.lexeme(self.source);
++//             out = format!("at '{lexeme}': {msg}");
++//         }
++//     };
++//     eprintln!("{out}");
++// }
+diff --git a/src/errors.rs b/src/errors.rs
+index ea07b4683c..0ebfc69f4d 100644
+--- a/src/errors.rs
++++ b/src/errors.rs
+@@ -1,7 +1,7 @@ pub enum Error {
+ #[derive(Debug, thiserror::Error)]
+ pub enum Error {
+-    #[error("compile error")]
+-    Compile,
+-    #[error("runtime error")]
+-    Runtime,
++    #[error("compile error: {0}")]
++    Compile(#[source] color_eyre::Report),
++    #[error("runtime error: {0}")]
++    Runtime(#[source] color_eyre::Report),
+ }
+diff --git a/src/main.rs b/src/main.rs
+index eefe703e60..bac1c1b35c 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -44,8 +44,9 @@ fn run_file(path: impl AsRef<Path>) -> color_eyre::Result<()> {
+     match VM::interpret(&source) {
+         Ok(_) => Ok(()),
+         Err(err) => match err {
+-            Error::Compile => exit(65),
+-            Error::Runtime => exit(70),
++            // TODO: handle inner error
++            Error::Compile(_) => exit(65),
++            Error::Runtime(_) => exit(70),
+         },
+     }
+ }
+diff --git a/src/scanner/mod.rs b/src/scanner/mod.rs
+index 4e2c2cec8b..caa021527b 100644
+--- a/src/scanner/mod.rs
++++ b/src/scanner/mod.rs
+@@ -5,6 +5,7 @@ pub mod token;
+ 
+ pub mod token;
+ 
++#[derive(Debug)]
+ pub struct Scanner<'source> {
+     source: &'source str,
+     chars: Peekable<CharIndices<'source>>,
+@@ -16,10 +17,18 @@ pub struct Scanner<'source> {
+ 
+ #[derive(Debug, thiserror::Error)]
+ pub enum Error {
+-    #[error("Unterminated string")]
+-    UnterminatedString,
+-    #[error("Unexpected character {0}")]
+-    UnexpectedCharacter(char),
++    #[error("[line {line}] Error: Unterminated string")]
++    UnterminatedString { line: usize },
++    #[error("[line {line}] Error: Unexpected character '{char}'")]
++    UnexpectedCharacter { char: char, line: usize },
++}
++
++impl Error {
++    pub fn line(&self) -> usize {
++        match self {
++            Self::UnterminatedString { line } | Self::UnexpectedCharacter { line, .. } => *line,
++        }
++    }
+ }
+ 
+ impl<'source> Iterator for Scanner<'source> {
+@@ -77,7 +86,12 @@ fn next(&mut self) -> Option<Self::Item> {
+             '"' => return Some(self.string()),
+             '0'..='9' => self.number(),
+             '_' | 'a'..='z' | 'A'..='Z' => self.identifier(),
+-            _ => return Some(Err(Error::UnexpectedCharacter(c))),
++            _ => {
++                return Some(Err(Error::UnexpectedCharacter {
++                    char: c,
++                    line: self.line,
++                }));
++            }
+         };
+         Some(Ok(token))
+     }
+@@ -110,7 +124,7 @@ fn skip_chars_while(&mut self, predicate: impl Fn(char) -> bool) -> Option<(usiz
+     fn skip_chars_while(&mut self, predicate: impl Fn(char) -> bool) -> Option<(usize, char)> {
+         let mut last: Option<(usize, char)> = None;
+         loop {
+-            let Some(item) = self.next_char_if(|c| predicate(c)) else {
++            let Some(item) = self.next_char_if(&predicate) else {
+                 break last;
+             };
+             last = Some(item);
+@@ -141,7 +155,7 @@ fn string(&mut self) -> Result<Token, Error> {
+             }
+         }
+         let Some((offset, _)) = self.next_char_eq('"') else {
+-            return Err(Error::UnterminatedString);
++            return Err(Error::UnterminatedString { line: self.line });
+         };
+         let token = self.make_token(TokenType::STRING, offset + 1);
+         Ok(token)
+@@ -158,8 +172,7 @@ fn number(&mut self) -> Token {
+             last = self.skip_chars_while(|c| c.is_ascii_digit());
+         }
+         let offset = last.map(|i| i.0).unwrap_or(self.token_start);
+-        let token = self.make_token(TokenType::NUMBER, offset + 1);
+-        token
++        self.make_token(TokenType::NUMBER, offset + 1)
+     }
+ 
+     fn identifier(&mut self) -> Token {
+@@ -184,8 +197,7 @@ fn identifier(&mut self) -> Token {
+             "while" => TokenType::WHILE,
+             _ => TokenType::IDENTIFIER,
+         };
+-        let token = self.make_token(typ, offset + 1);
+-        token
++        self.make_token(typ, offset + 1)
+     }
+ }
+ 
+@@ -217,10 +229,11 @@ fn scanner_next_stays_exhausted(#[case] source: &str) {
+     #[test]
+     fn scanner_next_returns_unexpected_character_error() {
+         let mut scanner = Scanner::new("@");
++        let line = scanner.line;
+ 
+         assert!(matches!(
+             scanner.next(),
+-            Some(Err(Error::UnexpectedCharacter('@')))
++            Some(Err(Error::UnexpectedCharacter { char: '@', line }))
+         ));
+         assert_eof_then_none(&mut scanner);
+     }
+@@ -382,10 +395,11 @@ fn scanner_next_tracks_lines_in_string(
+     #[case::multiline("\"hello\nworld")]
+     fn scanner_next_returns_unterminated_string_error(#[case] source: &str) {
+         let mut scanner = Scanner::new(source);
++        let line = scanner.line;
+ 
+         assert!(matches!(
+             scanner.next(),
+-            Some(Err(Error::UnterminatedString))
++            Some(Err(Error::UnterminatedString { line }))
+         ));
+         assert_eof_then_none(&mut scanner);
+     }
+diff --git a/src/scanner/token.rs b/src/scanner/token.rs
+index 7edfcc489a..df74b0d138 100644
+--- a/src/scanner/token.rs
++++ b/src/scanner/token.rs
+@@ -9,7 +9,8 @@ pub struct Token {
+ }
+ 
+ impl Token {
+-    pub(super) fn new(start: usize, end: usize, typ: TokenType, line: usize) -> Self {
++    /// Creates a token spanning the given byte range.
++    pub fn new(start: usize, end: usize, typ: TokenType, line: usize) -> Self {
+         debug_assert!(start < end);
+         Self {
+             start,
+@@ -19,7 +20,8 @@ pub fn new(start: usize, end: usize, typ: TokenType, line: usize) -> Self {
+         }
+     }
+ 
+-    pub(super) fn new_eof(line: usize) -> Self {
++    /// Creates an end-of-file token at the given line.
++    pub fn new_eof(line: usize) -> Self {
+         Self {
+             start: 0,
+             end: 0,
+@@ -28,10 +30,22 @@ pub fn new_eof(line: usize) -> Self {
+         }
+     }
+ 
+-    pub(super) fn is_eof(&self) -> bool {
++    /// Returns the token's type.
++    pub fn typ(&self) -> TokenType {
++        self.typ
++    }
++
++    /// Returns the line where the token occurs.
++    pub fn line(&self) -> usize {
++        self.line
++    }
++
++    /// Returns whether this is an end-of-file token.
++    pub fn is_eof(&self) -> bool {
+         self.typ == TokenType::EOF
+     }
+ 
++    /// Returns the token's lexeme within the source text.
+     pub fn lexeme<'s>(&self, source: &'s str) -> &'s str {
+         debug_assert_ne!(self.typ, TokenType::EOF);
+         &source[self.start..self.end]
+diff --git a/src/vm.rs b/src/vm.rs
+index 2d909449d2..5aa0fd7eaa 100644
+--- a/src/vm.rs
++++ b/src/vm.rs
+@@ -32,7 +32,7 @@ fn read_byte(&mut self) -> u8 {
+     fn read_byte(&mut self) -> u8 {
+         let byte = self.chunk.code()[self.ip];
+         self.ip += 1;
+-        return byte;
++        byte
+     }
+ 
+     fn read_constant(&mut self) -> Value {
+@@ -41,8 +41,8 @@ fn read_constant(&mut self) -> Value {
+ 
+     fn read_constant_24(&mut self) -> Value {
+         let mut bytes = [0u8; 3];
+-        for i in 0..3 {
+-            bytes[i] = self.read_byte();
++        for b in &mut bytes {
++            *b = self.read_byte();
+         }
+         let idx = decode_u24_le(&bytes);
+         self.chunk.values()[idx]

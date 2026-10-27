@@ -32,7 +32,7 @@ impl<'chunk> VM<'chunk> {
     fn read_byte(&mut self) -> u8 {
         let byte = self.chunk.code()[self.ip];
         self.ip += 1;
-        return byte;
+        byte
     }
 
     fn read_constant(&mut self) -> Value {
@@ -41,8 +41,8 @@ impl<'chunk> VM<'chunk> {
 
     fn read_constant_24(&mut self) -> Value {
         let mut bytes = [0u8; 3];
-        for i in 0..3 {
-            bytes[i] = self.read_byte();
+        for b in &mut bytes {
+            *b = self.read_byte();
         }
         let idx = decode_u24_le(&bytes);
         self.chunk.values()[idx]

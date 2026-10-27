@@ -9,7 +9,8 @@ pub struct Token {
 }
 
 impl Token {
-    pub(super) fn new(start: usize, end: usize, typ: TokenType, line: usize) -> Self {
+    /// Creates a token spanning the given byte range.
+    pub fn new(start: usize, end: usize, typ: TokenType, line: usize) -> Self {
         debug_assert!(start < end);
         Self {
             start,
@@ -19,7 +20,8 @@ impl Token {
         }
     }
 
-    pub(super) fn new_eof(line: usize) -> Self {
+    /// Creates an end-of-file token at the given line.
+    pub fn new_eof(line: usize) -> Self {
         Self {
             start: 0,
             end: 0,
@@ -28,12 +30,34 @@ impl Token {
         }
     }
 
-    pub(super) fn is_eof(&self) -> bool {
+    /// Creates an end-of-file token at the given line.
+    pub fn not_a_token() -> Self {
+        Self {
+            start: 0,
+            end: 0,
+            typ: TokenType::NAT,
+            line: 0,
+        }
+    }
+
+    /// Returns the token's type.
+    pub fn typ(&self) -> TokenType {
+        self.typ
+    }
+
+    /// Returns the line where the token occurs.
+    pub fn line(&self) -> usize {
+        self.line
+    }
+
+    /// Returns whether this is an end-of-file token.
+    pub fn is_eof(&self) -> bool {
         self.typ == TokenType::EOF
     }
 
+    /// Returns the token's lexeme within the source text.
     pub fn lexeme<'s>(&self, source: &'s str) -> &'s str {
-        debug_assert_ne!(self.typ, TokenType::EOF);
+        debug_assert!(!matches!(self.typ, TokenType::EOF | TokenType::NAT));
         &source[self.start..self.end]
     }
 }
@@ -88,7 +112,8 @@ pub enum TokenType {
     WHILE,
 
     // Signals
-    EOF,
+    EOF, // end of file
+    NAT, // not a token
 }
 
 #[cfg(test)]

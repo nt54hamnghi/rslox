@@ -18,8 +18,11 @@ thiserror = "2.0.20"
 rstest = "0.27.0"
 
 [lints.rust]
-# unsafe_code = { priority = 5, level = "forbid" }
-unused = { priority = -1, level = "allow" }
+unused = { priority = 0, level = "allow" }
+non_camel_case_types = { priority = 0, level = "allow" }
+
+[lints.clippy]
+upper_case_acronyms = { priority = 0, level = "allow" }
 
 [profile.dev.package.backtrace]
 opt-level = 3

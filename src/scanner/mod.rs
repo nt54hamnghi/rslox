@@ -5,6 +5,7 @@ use crate::scanner::token::{Token, TokenType};
 
 pub mod token;
 
+#[derive(Debug)]
 pub struct Scanner<'source> {
     source: &'source str,
     chars: Peekable<CharIndices<'source>>,
@@ -16,13 +17,21 @@ pub struct Scanner<'source> {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Unterminated string")]
-    UnterminatedString,
-    #[error("Unexpected character {0}")]
-    UnexpectedCharacter(char),
+    #[error("[line {line}] Error: Unterminated string")]
+    UnterminatedString { line: usize },
+    #[error("[line {line}] Error: Unexpected character '{char}'")]
+    UnexpectedCharacter { char: char, line: usize },
 }
 
-impl<'source> Iterator for Scanner<'source> {
+impl Error {
+    pub fn line(&self) -> usize {
+        match self {
+            Self::UnterminatedString { line } | Self::UnexpectedCharacter { line, .. } => *line,
+        }
+    }
+}
+
+impl Iterator for Scanner<'_> {
     type Item = Result<Token, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -77,7 +86,12 @@ impl<'source> Iterator for Scanner<'source> {
             '"' => return Some(self.string()),
             '0'..='9' => self.number(),
             '_' | 'a'..='z' | 'A'..='Z' => self.identifier(),
-            _ => return Some(Err(Error::UnexpectedCharacter(c))),
+            _ => {
+                return Some(Err(Error::UnexpectedCharacter {
+                    char: c,
+                    line: self.line,
+                }));
+            }
         };
         Some(Ok(token))
     }
@@ -110,7 +124,7 @@ impl<'source> Scanner<'source> {
     fn skip_chars_while(&mut self, predicate: impl Fn(char) -> bool) -> Option<(usize, char)> {
         let mut last: Option<(usize, char)> = None;
         loop {
-            let Some(item) = self.next_char_if(|c| predicate(c)) else {
+            let Some(item) = self.next_char_if(&predicate) else {
                 break last;
             };
             last = Some(item);
@@ -141,7 +155,7 @@ impl<'source> Scanner<'source> {
             }
         }
         let Some((offset, _)) = self.next_char_eq('"') else {
-            return Err(Error::UnterminatedString);
+            return Err(Error::UnterminatedString { line: self.line });
         };
         let token = self.make_token(TokenType::STRING, offset + 1);
         Ok(token)
@@ -158,8 +172,7 @@ impl<'source> Scanner<'source> {
             last = self.skip_chars_while(|c| c.is_ascii_digit());
         }
         let offset = last.map(|i| i.0).unwrap_or(self.token_start);
-        let token = self.make_token(TokenType::NUMBER, offset + 1);
-        token
+        self.make_token(TokenType::NUMBER, offset + 1)
     }
 
     fn identifier(&mut self) -> Token {
@@ -184,8 +197,7 @@ impl<'source> Scanner<'source> {
             "while" => TokenType::WHILE,
             _ => TokenType::IDENTIFIER,
         };
-        let token = self.make_token(typ, offset + 1);
-        token
+        self.make_token(typ, offset + 1)
     }
 }
 
@@ -217,10 +229,11 @@ mod tests {
     #[test]
     fn scanner_next_returns_unexpected_character_error() {
         let mut scanner = Scanner::new("@");
+        let line = scanner.line;
 
         assert!(matches!(
             scanner.next(),
-            Some(Err(Error::UnexpectedCharacter('@')))
+            Some(Err(Error::UnexpectedCharacter { char: '@', line }))
         ));
         assert_eof_then_none(&mut scanner);
     }
@@ -382,10 +395,11 @@ mod tests {
     #[case::multiline("\"hello\nworld")]
     fn scanner_next_returns_unterminated_string_error(#[case] source: &str) {
         let mut scanner = Scanner::new(source);
+        let line = scanner.line;
 
         assert!(matches!(
             scanner.next(),
-            Some(Err(Error::UnterminatedString))
+            Some(Err(Error::UnterminatedString { line }))
         ));
         assert_eof_then_none(&mut scanner);
     }
