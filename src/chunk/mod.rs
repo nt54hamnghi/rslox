@@ -13,7 +13,7 @@ pub enum OpCode {
     // Load a constant using a 8-bit index.
     OP_CONSTANT,
     // Load a constant using a 24-bit index.
-    OP_CONSTANT_LONG,
+    OP_CONSTANT_24,
     OP_ADD,
     OP_SUBTRACT,
     OP_MULTIPLY,
@@ -26,7 +26,7 @@ impl Display for OpCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
             OpCode::OP_CONSTANT => "OP_CONSTANT",
-            OpCode::OP_CONSTANT_LONG => "OP_CONSTANT_LONG",
+            OpCode::OP_CONSTANT_24 => "OP_CONSTANT_24",
             OpCode::OP_ADD => "OP_ADD",
             OpCode::OP_SUBTRACT => "OP_SUBTRACT",
             OpCode::OP_MULTIPLY => "OP_MULTIPLY",
@@ -44,7 +44,7 @@ impl TryFrom<u8> for OpCode {
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(Self::OP_CONSTANT),
-            1 => Ok(Self::OP_CONSTANT_LONG),
+            1 => Ok(Self::OP_CONSTANT_24),
             2 => Ok(Self::OP_ADD),
             3 => Ok(Self::OP_SUBTRACT),
             4 => Ok(Self::OP_MULTIPLY),
@@ -125,7 +125,7 @@ impl Chunk {
     ///
     /// If the value's index fits in 8 bits, it is encoded as a one-byte operand
     /// using `OP_CONSTANT`. If it fits in 24 bits, it is encoded as a three-byte
-    /// little-endian operand using `OP_CONSTANT_LONG`.
+    /// little-endian operand using `OP_CONSTANT_24`.
     ///
     /// Records `line` for the opcode and all operand bytes.
     ///
@@ -143,7 +143,7 @@ impl Chunk {
         }
 
         assert!(idx < 2usize.pow(24));
-        self.write_opcode(OpCode::OP_CONSTANT_LONG, line);
+        self.write_opcode(OpCode::OP_CONSTANT_24, line);
         let bytes = idx.to_le_bytes();
         for b in &bytes[0..3] {
             self.write_byte(*b, line);
@@ -200,7 +200,7 @@ mod tests {
 
     #[rstest]
     #[case(OpCode::OP_CONSTANT, 0, "OP_CONSTANT")]
-    #[case(OpCode::OP_CONSTANT_LONG, 1, "OP_CONSTANT_LONG")]
+    #[case(OpCode::OP_CONSTANT_24, 1, "OP_CONSTANT_24")]
     #[case(OpCode::OP_ADD, 2, "OP_ADD")]
     #[case(OpCode::OP_SUBTRACT, 3, "OP_SUBTRACT")]
     #[case(OpCode::OP_MULTIPLY, 4, "OP_MULTIPLY")]
@@ -218,7 +218,7 @@ mod tests {
 
     #[rstest]
     #[case(0, OpCode::OP_CONSTANT)]
-    #[case(1, OpCode::OP_CONSTANT_LONG)]
+    #[case(1, OpCode::OP_CONSTANT_24)]
     #[case(2, OpCode::OP_ADD)]
     #[case(3, OpCode::OP_SUBTRACT)]
     #[case(4, OpCode::OP_MULTIPLY)]
@@ -349,9 +349,9 @@ mod tests {
 
     #[rstest]
     #[case(255, OpCode::OP_CONSTANT, vec![0xff])]
-    #[case(256, OpCode::OP_CONSTANT_LONG, vec![0x00, 0x01, 0x00])]
-    #[case(0x01_02_03, OpCode::OP_CONSTANT_LONG, vec![0x03, 0x02, 0x01])]
-    #[case(0xff_ff_ff, OpCode::OP_CONSTANT_LONG, vec![0xff, 0xff, 0xff])]
+    #[case(256, OpCode::OP_CONSTANT_24, vec![0x00, 0x01, 0x00])]
+    #[case(0x01_02_03, OpCode::OP_CONSTANT_24, vec![0x03, 0x02, 0x01])]
+    #[case(0xff_ff_ff, OpCode::OP_CONSTANT_24, vec![0xff, 0xff, 0xff])]
     fn write_constant_encodes_the_index(
         #[case] index: usize,
         #[case] opcode: OpCode,

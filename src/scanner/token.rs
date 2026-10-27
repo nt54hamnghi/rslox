@@ -19,7 +19,21 @@ impl Token {
         }
     }
 
+    pub(super) fn new_eof(line: usize) -> Self {
+        Self {
+            start: 0,
+            end: 0,
+            typ: TokenType::EOF,
+            line,
+        }
+    }
+
+    pub(super) fn is_eof(&self) -> bool {
+        self.typ == TokenType::EOF
+    }
+
     pub fn lexeme<'s>(&self, source: &'s str) -> &'s str {
+        debug_assert_ne!(self.typ, TokenType::EOF);
         &source[self.start..self.end]
     }
 }
@@ -72,8 +86,9 @@ pub enum TokenType {
     TRUE,
     VAR,
     WHILE,
+
     // Signals
-    // EOF,
+    EOF,
 }
 
 #[cfg(test)]

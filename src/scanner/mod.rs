@@ -11,6 +11,7 @@ pub struct Scanner<'source> {
     /// Starting offset into the source code of the current token
     token_start: usize,
     line: usize,
+    at_eof: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -25,7 +26,13 @@ impl<'source> Iterator for Scanner<'source> {
     type Item = Result<Token, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (offset, c) = self.chars.next()?;
+        if self.at_eof {
+            return None;
+        }
+        let Some((offset, c)) = self.chars.next() else {
+            self.at_eof = true;
+            return Some(Ok(Token::new_eof(self.line)));
+        };
         self.token_start = offset;
 
         let token = match c {
@@ -85,6 +92,7 @@ impl<'source> Scanner<'source> {
             chars: source.char_indices().peekable(),
             token_start: 0,
             line: 1,
+            at_eof: false,
         }
     }
 
@@ -187,6 +195,11 @@ mod tests {
 
     use super::{Error, Scanner, Token, TokenType};
 
+    fn assert_eof_then_none(scanner: &mut Scanner<'_>) {
+        assert!(scanner.next().unwrap().unwrap().is_eof());
+        assert!(scanner.next().is_none());
+    }
+
     #[rstest]
     #[case::empty("")]
     #[case::nonempty("+")]
@@ -197,7 +210,7 @@ mod tests {
             assert!(scanner.next().is_some());
         }
 
-        assert!(scanner.next().is_none());
+        assert_eof_then_none(&mut scanner);
         assert!(scanner.next().is_none());
     }
 
@@ -209,7 +222,7 @@ mod tests {
             scanner.next(),
             Some(Err(Error::UnexpectedCharacter('@')))
         ));
-        assert!(scanner.next().is_none());
+        assert_eof_then_none(&mut scanner);
     }
 
     #[rstest]
@@ -227,7 +240,7 @@ mod tests {
     fn scanner_next_returns_single_character_token(#[case] source: &str, #[case] typ: TokenType) {
         let mut scanner = Scanner::new(source);
         let token = scanner.next().unwrap().unwrap();
-        assert!(scanner.next().is_none());
+        assert_eof_then_none(&mut scanner);
 
         assert_eq!(token, Token::new(0, 1, typ, 1));
         assert_eq!(token.lexeme(source), source);
@@ -248,7 +261,7 @@ mod tests {
     ) {
         let mut scanner = Scanner::new(source);
         let token = scanner.next().unwrap().unwrap();
-        assert!(scanner.next().is_none());
+        assert_eof_then_none(&mut scanner);
 
         assert_eq!(token, Token::new(0, source.len(), typ, 1));
         assert_eq!(token.lexeme(source), source);
@@ -269,7 +282,7 @@ mod tests {
     ) {
         let mut scanner = Scanner::new(source);
         let token = scanner.next().unwrap().unwrap();
-        assert!(scanner.next().is_none());
+        assert_eof_then_none(&mut scanner);
 
         assert_eq!(token, Token::new(start, start + 1, TokenType::PLUS, line));
         assert_eq!(token.lexeme(source), "+");
@@ -281,7 +294,7 @@ mod tests {
         let mut scanner = Scanner::new(source);
         let first = scanner.next().unwrap().unwrap();
         let second = scanner.next().unwrap().unwrap();
-        assert!(scanner.next().is_none());
+        assert_eof_then_none(&mut scanner);
 
         assert_eq!(first, Token::new(0, 1, TokenType::PLUS, 1));
         assert_eq!(first.lexeme(source), "+");
@@ -290,10 +303,10 @@ mod tests {
     }
 
     #[test]
-    fn scanner_next_returns_none_for_only_white_space() {
+    fn scanner_next_returns_eof_for_only_white_space() {
         let mut scanner = Scanner::new(" \t\r\n");
 
-        assert!(scanner.next().is_none());
+        assert_eof_then_none(&mut scanner);
     }
 
     #[rstest]
@@ -311,16 +324,16 @@ mod tests {
             assert!(matches!(scanner.next(), Some(Ok(actual)) if actual == token));
         }
 
-        assert!(scanner.next().is_none());
+        assert_eof_then_none(&mut scanner);
     }
 
     #[rstest]
     #[case::empty_comment("//")]
     #[case::comment_text("//text")]
-    fn scanner_next_returns_none_for_comment_at_eof(#[case] source: &str) {
+    fn scanner_next_returns_eof_for_comment_at_eof(#[case] source: &str) {
         let mut scanner = Scanner::new(source);
 
-        assert!(scanner.next().is_none());
+        assert_eof_then_none(&mut scanner);
     }
 
     #[rstest]
@@ -337,7 +350,7 @@ mod tests {
     ) {
         let mut scanner = Scanner::new(source);
         let token = scanner.next().unwrap().unwrap();
-        assert!(scanner.next().is_none());
+        assert_eof_then_none(&mut scanner);
 
         assert_eq!(token, Token::new(start, source.len(), TokenType::STRING, 1));
         assert_eq!(token.lexeme(source), lexeme);
@@ -357,7 +370,7 @@ mod tests {
     ) {
         let mut scanner = Scanner::new(source);
         let token = scanner.next().unwrap().unwrap();
-        assert!(scanner.next().is_none());
+        assert_eof_then_none(&mut scanner);
 
         assert_eq!(token, Token::new(start, end, TokenType::STRING, line));
         assert_eq!(token.lexeme(source), lexeme);
@@ -374,7 +387,7 @@ mod tests {
             scanner.next(),
             Some(Err(Error::UnterminatedString))
         ));
-        assert!(scanner.next().is_none());
+        assert_eof_then_none(&mut scanner);
     }
 
     #[rstest]
@@ -397,7 +410,7 @@ mod tests {
     ) {
         let mut scanner = Scanner::new(source);
         let token = scanner.next().unwrap().unwrap();
-        assert!(scanner.next().is_none());
+        assert_eof_then_none(&mut scanner);
 
         assert_eq!(
             token,
@@ -424,7 +437,7 @@ mod tests {
     ) {
         let mut scanner = Scanner::new(source);
         let token = scanner.next().unwrap().unwrap();
-        assert!(scanner.next().is_none());
+        assert_eof_then_none(&mut scanner);
 
         assert_eq!(
             token,
@@ -453,7 +466,7 @@ mod tests {
     fn scanner_next_returns_keyword(#[case] source: &str, #[case] typ: TokenType) {
         let mut scanner = Scanner::new(source);
         let token = scanner.next().unwrap().unwrap();
-        assert!(scanner.next().is_none());
+        assert_eof_then_none(&mut scanner);
 
         assert_eq!(token, Token::new(0, source.len(), typ, 1));
         assert_eq!(token.lexeme(source), source);
@@ -485,7 +498,7 @@ mod tests {
     ) {
         let mut scanner = Scanner::new(source);
         let token = scanner.next().unwrap().unwrap();
-        assert!(scanner.next().is_none());
+        assert_eof_then_none(&mut scanner);
 
         assert_eq!(
             token,

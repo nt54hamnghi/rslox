@@ -12,17 +12,19 @@ pub struct VM<'chunk> {
 }
 
 impl<'chunk> VM<'chunk> {
-    pub fn new(chunk: &'chunk Chunk, ip: usize) -> VM<'chunk> {
+    pub fn new(chunk: &'chunk Chunk) -> VM<'chunk> {
         VM {
             chunk,
-            ip,
+            ip: 0,
             stack: Stack::new(),
         }
     }
 
     pub fn interpret(source: &str) -> Result<(), Error> {
-        compile(source);
-        Ok(())
+        let mut chunk = Chunk::new();
+        compile(source, &mut chunk)?;
+        let mut vm = VM::new(&chunk);
+        vm.run()
     }
 
     /// Reads the byte currently pointed at and advances the
@@ -37,7 +39,7 @@ impl<'chunk> VM<'chunk> {
         self.chunk.values()[self.read_byte() as usize]
     }
 
-    fn read_long_constant(&mut self) -> Value {
+    fn read_constant_24(&mut self) -> Value {
         let mut bytes = [0u8; 3];
         for i in 0..3 {
             bytes[i] = self.read_byte();
@@ -61,7 +63,7 @@ impl<'chunk> VM<'chunk> {
 
         loop {
             let byte = self.read_byte();
-            // being unable to convert into an opcode indicates
+            // failure to convert into an opcode indicates
             // bugs in bytecode walking logic
             let opcode = OpCode::try_from(byte).expect("a valid opcode");
 
@@ -78,8 +80,8 @@ impl<'chunk> VM<'chunk> {
                     let constant = self.read_constant();
                     self.stack.push(constant).unwrap();
                 }
-                OpCode::OP_CONSTANT_LONG => {
-                    let constant = self.read_long_constant();
+                OpCode::OP_CONSTANT_24 => {
+                    let constant = self.read_constant_24();
                     self.stack.push(constant).unwrap();
                 }
                 OpCode::OP_ADD => binary_op!(+),
@@ -88,9 +90,6 @@ impl<'chunk> VM<'chunk> {
                 OpCode::OP_DIVIDE => binary_op!(/),
                 OpCode::OP_NEGATE => {
                     // OP_NEGATE expects a value on the stack.
-                    // If the stack is empty, something went wrong during compilation:
-                    // the compiler should have rejected the invalid expression before
-                    // the VM started executing.
                     let value = self.stack.pop().unwrap();
                     self.stack.push(-value).unwrap();
                 }
@@ -131,7 +130,7 @@ mod tests {
         for byte in [42, 0, 255] {
             chunk.write_byte(byte, 1);
         }
-        let mut vm = VM::new(&chunk, 0);
+        let mut vm = VM::new(&chunk);
         vm.ip = position;
 
         assert_eq!(vm.read_byte(), expected);
@@ -146,7 +145,7 @@ mod tests {
         chunk.add_constant(1.5);
         chunk.add_constant(-2.0);
         chunk.write_byte(index, 1);
-        let mut vm = VM::new(&chunk, 0);
+        let mut vm = VM::new(&chunk);
 
         assert_eq!(vm.read_constant(), expected);
         assert_eq!(vm.ip, 1);
@@ -162,9 +161,9 @@ mod tests {
         chunk.write_byte(index, 1);
         chunk.write_byte(0, 1);
         chunk.write_byte(0, 1);
-        let mut vm = VM::new(&chunk, 0);
+        let mut vm = VM::new(&chunk);
 
-        assert_eq!(vm.read_long_constant(), expected);
+        assert_eq!(vm.read_constant_24(), expected);
         assert_eq!(vm.ip, 3);
     }
 }

@@ -28,7 +28,7 @@ impl Chunk {
                 let value = self.constants[index];
                 println!("{opcode:<18} {index:>4} {value}");
             }
-            OpCode::OP_CONSTANT_LONG => {
+            OpCode::OP_CONSTANT_24 => {
                 let bytes = &self.code[offset + 1..=offset + 3];
                 let index = decode_u24_le(bytes);
                 let value = self.constants[index];
@@ -77,7 +77,7 @@ impl<'chunk> Iterator for ChunkIterator<'chunk> {
                 self.offset = offset + 2;
                 Some((offset, opcode))
             }
-            OpCode::OP_CONSTANT_LONG => {
+            OpCode::OP_CONSTANT_24 => {
                 self.offset = offset + 4;
                 Some((offset, opcode))
             }
@@ -128,7 +128,7 @@ mod tests {
         assert_eq!(items.len(), 1);
         let (offset, opcode) = items[0];
         assert_eq!(offset, 0);
-        assert_eq!(opcode, OpCode::OP_CONSTANT_LONG);
+        assert_eq!(opcode, OpCode::OP_CONSTANT_24);
     }
 
     #[test]
