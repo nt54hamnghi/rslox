@@ -24,14 +24,14 @@ impl<T, const N: usize> Stack<T, N> {
     }
 
     pub fn as_slice(&self) -> &[T] {
-        debug_assert!(self.len() <= N);
+        debug_assert!(self.top <= N);
         // SAFETY:
         // `MaybeUninit<T>` has the same size and alignment as `T`, and
         // every slot below `top` contains an initialized `T`.
         //
         // The returned slice borrows `self`, so the memory cannot be
         // mutated/dropped while the slice is alive.
-        unsafe { slice::from_raw_parts(self.inner.as_ptr().cast(), self.len()) }
+        unsafe { slice::from_raw_parts(self.inner.as_ptr().cast(), self.top) }
     }
 
     pub fn len(&self) -> usize {
@@ -81,8 +81,7 @@ impl<T, const N: usize> Drop for Stack<T, N> {
     fn drop(&mut self) {
         // SAFETY: Visit only the initialized values below `top`
         // so that moved/popped values are not dropped twice.
-        let len = self.len();
-        for elem in &mut self.inner[0..len] {
+        for elem in &mut self.inner[0..self.top] {
             unsafe {
                 elem.assume_init_drop();
             }

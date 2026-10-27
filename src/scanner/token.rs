@@ -72,9 +72,8 @@ pub enum TokenType {
     TRUE,
     VAR,
     WHILE,
-
     // Signals
-    EOF,
+    // EOF,
 }
 
 #[cfg(test)]

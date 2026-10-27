@@ -1,4 +1,4 @@
-use std::iter::Peekable;
+use std::iter::{FusedIterator, Peekable};
 use std::str::CharIndices;
 
 use crate::scanner::token::{Token, TokenType};
@@ -17,7 +17,7 @@ pub struct Scanner<'source> {
 pub enum Error {
     #[error("Unterminated string")]
     UnterminatedString,
-    #[error("Unexpected charcer {0}")]
+    #[error("Unexpected character {0}")]
     UnexpectedCharacter(char),
 }
 
@@ -75,6 +75,8 @@ impl<'source> Iterator for Scanner<'source> {
         Some(Ok(token))
     }
 }
+
+impl<'source> FusedIterator for Scanner<'source> {}
 
 impl<'source> Scanner<'source> {
     pub fn new(source: &'source str) -> Scanner<'source> {
