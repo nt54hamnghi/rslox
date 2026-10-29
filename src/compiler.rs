@@ -41,8 +41,12 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
 
         // parsing lhs
         match token.typ() {
-            TokenType::NUMBER => self.number(),
             TokenType::EOF => return Ok(()),
+            TokenType::NUMBER => self.number(),
+            TokenType::MINUS => {
+                let (_, rbp) = Precedence::UNARY.prefix_binding_power();
+                self.unary(rbp)?;
+            }
             _ => todo!(),
         };
 
@@ -61,31 +65,50 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
                 if lbp < min_bp {
                     break;
                 }
-
                 // advance pass the operator
-                self.scanner.next().unwrap();
-                // parse rhs
-                self.expression(rbp)?;
-
-                let opcode = match op.typ() {
-                    TokenType::PLUS => OpCode::OP_ADD,
-                    TokenType::MINUS => OpCode::OP_SUBTRACT,
-                    TokenType::SLASH => OpCode::OP_DIVIDE,
-                    TokenType::STAR => OpCode::OP_MULTIPLY,
-                    _ => unreachable!(),
-                };
-
-                self.emit_opcode(opcode);
+                self.previous = self.scanner.next().unwrap();
+                self.binary(rbp)?;
             }
         }
 
         Ok(())
     }
 
+    fn binary(&mut self, rbp: u8) -> Result<(), color_eyre::eyre::Error> {
+        let token = self.previous;
+        let opcode = match token.typ() {
+            TokenType::PLUS => OpCode::OP_ADD,
+            TokenType::MINUS => OpCode::OP_SUBTRACT,
+            TokenType::SLASH => OpCode::OP_DIVIDE,
+            TokenType::STAR => OpCode::OP_MULTIPLY,
+            _ => unreachable!(),
+        };
+
+        self.expression(rbp)?;
+        self.emit_opcode(opcode);
+
+        Ok(())
+    }
+
+    fn unary(&mut self, rbp: u8) -> Result<(), color_eyre::eyre::Error> {
+        let token = self.previous;
+        let opcode = match token.typ() {
+            TokenType::MINUS => OpCode::OP_NEGATE,
+            TokenType::BANG => todo!(),
+            _ => unreachable!(),
+        };
+
+        self.expression(rbp)?;
+        self.emit_opcode(opcode);
+
+        Ok(())
+    }
+
     fn number(&mut self) {
         let token = self.previous;
-        // the scanner only produces NUMBER tokens for valid numeric literals
         debug_assert_eq!(token.typ(), TokenType::NUMBER);
+
+        // the scanner only produces NUMBER tokens for valid numeric literals
         let lexeme = token.lexeme(self.source);
         let value = lexeme.parse::<f64>().unwrap();
         self.emit_constant(value);
@@ -155,6 +178,8 @@ impl Precedence {
 impl From<Token> for Precedence {
     fn from(value: Token) -> Self {
         match value.typ() {
+            // FIXME: this is slightly incorrect as `MINUS`
+            // can also be used as an unary operator
             TokenType::PLUS | TokenType::MINUS => Self::TERM,
             TokenType::STAR | TokenType::SLASH => Self::FACTOR,
             _ => Self::NONE,
@@ -237,6 +262,43 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(chunk.code(), &[OpCode::OP_CONSTANT as u8, 0]);
         assert_eq!(chunk.values(), &[42.0]);
+    }
+
+    #[test]
+    fn parse_unary_minus_emits_negate() {
+        let mut chunk = Chunk::new();
+        let result = Parser::parse("-42", &mut chunk);
+
+        assert!(result.is_ok());
+        assert_eq!(
+            chunk.code(),
+            &[OpCode::OP_CONSTANT as u8, 0, OpCode::OP_NEGATE as u8]
+        );
+        assert_eq!(chunk.values(), &[42.0]);
+    }
+
+    #[rstest]
+    #[case::before_add("-8 + 2", OpCode::OP_ADD)]
+    #[case::before_sub("-8 - 2", OpCode::OP_SUBTRACT)]
+    #[case::before_mul("-8 * 2", OpCode::OP_MULTIPLY)]
+    #[case::before_div("-8 / 2", OpCode::OP_DIVIDE)]
+    fn parse_unary_operator_precedence(#[case] source: &str, #[case] binary_op: OpCode) {
+        let mut chunk = Chunk::new();
+        let result = Parser::parse(source, &mut chunk);
+
+        assert!(result.is_ok());
+        assert_eq!(
+            chunk.code(),
+            &[
+                OpCode::OP_CONSTANT as u8,
+                0,
+                OpCode::OP_NEGATE as u8,
+                OpCode::OP_CONSTANT as u8,
+                1,
+                binary_op as u8,
+            ]
+        );
+        assert_eq!(chunk.values(), &[8.0, 2.0]);
     }
 
     #[rstest]
