@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::iter::Peekable;
 
 use color_eyre::eyre::OptionExt;
@@ -42,6 +43,7 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
         // parsing lhs
         match token.typ() {
             TokenType::EOF => return Ok(()),
+            TokenType::LEFT_PAREN => self.grouping()?,
             TokenType::NUMBER => self.number(),
             TokenType::MINUS => {
                 let (_, rbp) = Precedence::UNARY.prefix_binding_power();
@@ -57,7 +59,7 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
                 .ok_or_eyre("unexpected end of token streams")?;
 
             let prec = match op.typ() {
-                TokenType::EOF => break,
+                TokenType::EOF | TokenType::RIGHT_PAREN => break,
                 _ => Precedence::from(op),
             };
 
@@ -71,6 +73,19 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
             }
         }
 
+        Ok(())
+    }
+
+    fn grouping(&mut self) -> Result<(), color_eyre::eyre::Error> {
+        self.expression(0)?;
+        self.consume(TokenType::RIGHT_PAREN, "Expect ')' after expression.")?;
+        Ok(())
+    }
+
+    fn consume(&mut self, token_type: TokenType, msg: &str) -> color_eyre::Result<()> {
+        if self.scanner.next_if(|t| t.typ() == token_type).is_none() {
+            return Err(self.error_at(&self.previous, msg));
+        };
         Ok(())
     }
 
@@ -134,6 +149,21 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
         let line = self.previous.line();
         debug_assert_ne!(line, 0);
         self.chunk.write_constant(value, line);
+    }
+
+    fn error_at(&self, token: &Token, msg: &str) -> color_eyre::Report {
+        let mut buf = format!("[line {}] Error", token.line());
+
+        match token.typ() {
+            TokenType::EOF => buf.push_str(" at end"),
+            _ => {
+                let lexeme = token.lexeme(self.source);
+                write!(buf, " at '{lexeme}'").unwrap();
+            }
+        }
+
+        write!(buf, ": {msg}").unwrap();
+        color_eyre::eyre::eyre!(buf)
     }
 }
 
@@ -389,5 +419,39 @@ mod tests {
             ]
         );
         assert_eq!(chunk.values(), &[8.0, 4.0, 2.0]);
+    }
+
+    #[rstest]
+    #[case::single_number("(8)", &[OpCode::OP_CONSTANT as u8, 0], &[8.0])]
+    #[case::nested_group("((8))", &[OpCode::OP_CONSTANT as u8, 0], &[8.0])]
+    #[case::precedence(
+            "(8 + 4) * 2",
+            &[OpCode::OP_CONSTANT as u8, 0, OpCode::OP_CONSTANT as u8, 1,
+              OpCode::OP_ADD as u8, OpCode::OP_CONSTANT as u8, 2, OpCode::OP_MULTIPLY as u8],
+            &[8.0, 4.0, 2.0],
+        )]
+    #[case::associativity(
+            "8 - (4 - 2)",
+            &[OpCode::OP_CONSTANT as u8, 0, OpCode::OP_CONSTANT as u8, 1,
+              OpCode::OP_CONSTANT as u8, 2, OpCode::OP_SUBTRACT as u8, OpCode::OP_SUBTRACT as u8],
+            &[8.0, 4.0, 2.0],
+        )]
+    #[case::unary(
+            "-(8 + 4)",
+            &[OpCode::OP_CONSTANT as u8, 0, OpCode::OP_CONSTANT as u8, 1,
+              OpCode::OP_ADD as u8, OpCode::OP_NEGATE as u8],
+            &[8.0, 4.0],
+        )]
+    fn parse_grouped_expression(
+        #[case] source: &str,
+        #[case] expected_code: &[u8],
+        #[case] expected_values: &[f64],
+    ) {
+        let mut chunk = Chunk::new();
+        let result = Parser::parse(source, &mut chunk);
+
+        assert!(result.is_ok());
+        assert_eq!(chunk.code(), expected_code);
+        assert_eq!(chunk.values(), expected_values);
     }
 }
