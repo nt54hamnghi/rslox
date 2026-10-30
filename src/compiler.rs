@@ -45,32 +45,40 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
             TokenType::EOF => return Ok(()),
             TokenType::LEFT_PAREN => self.grouping()?,
             TokenType::NUMBER => self.number(),
-            TokenType::MINUS => {
-                let (_, rbp) = Precedence::UNARY.prefix_binding_power();
-                self.unary(rbp)?;
+            _ => {
+                if let Some((opcode, prec)) = token.prefix_rule() {
+                    let rbp = prec as u8 + 1;
+                    self.expression(rbp)?;
+                    self.emit_opcode(opcode);
+                }
             }
-            _ => todo!(),
         };
 
         loop {
-            let op = *self
+            let token = *self
                 .scanner
                 .peek()
                 .ok_or_eyre("unexpected end of token streams")?;
 
-            let prec = match op.typ() {
-                TokenType::EOF | TokenType::RIGHT_PAREN => break,
-                _ => Precedence::from(op),
-            };
+            if let Some((opcode, prec)) = token.infix_rule() {
+                let (lbp, rbp) = match prec {
+                    Precedence::TERM | Precedence::FACTOR => (prec as u8, prec as u8 + 1),
+                    _ => unreachable!(),
+                };
 
-            if let Some((lbp, rbp)) = prec.infix_binding_power() {
                 if lbp < min_bp {
                     break;
                 }
-                // advance pass the operator
-                self.previous = self.scanner.next().unwrap();
-                self.binary(rbp)?;
+
+                // consumed the operator token
+                self.scanner.next().unwrap();
+                self.expression(rbp)?;
+                self.emit_opcode(opcode);
+
+                continue;
             }
+
+            break;
         }
 
         Ok(())
@@ -86,36 +94,6 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
         if self.scanner.next_if(|t| t.typ() == token_type).is_none() {
             return Err(self.error_at(&self.previous, msg));
         };
-        Ok(())
-    }
-
-    fn binary(&mut self, rbp: u8) -> Result<(), color_eyre::eyre::Error> {
-        let token = self.previous;
-        let opcode = match token.typ() {
-            TokenType::PLUS => OpCode::OP_ADD,
-            TokenType::MINUS => OpCode::OP_SUBTRACT,
-            TokenType::SLASH => OpCode::OP_DIVIDE,
-            TokenType::STAR => OpCode::OP_MULTIPLY,
-            _ => unreachable!(),
-        };
-
-        self.expression(rbp)?;
-        self.emit_opcode(opcode);
-
-        Ok(())
-    }
-
-    fn unary(&mut self, rbp: u8) -> Result<(), color_eyre::eyre::Error> {
-        let token = self.previous;
-        let opcode = match token.typ() {
-            TokenType::MINUS => OpCode::OP_NEGATE,
-            TokenType::BANG => todo!(),
-            _ => unreachable!(),
-        };
-
-        self.expression(rbp)?;
-        self.emit_opcode(opcode);
-
         Ok(())
     }
 
@@ -167,6 +145,25 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
     }
 }
 
+impl Token {
+    fn prefix_rule(&self) -> Option<(OpCode, Precedence)> {
+        match self.typ() {
+            TokenType::MINUS => Some((OpCode::OP_NEGATE, Precedence::UNARY)),
+            _ => None,
+        }
+    }
+
+    fn infix_rule(&self) -> Option<(OpCode, Precedence)> {
+        match self.typ() {
+            TokenType::PLUS => Some((OpCode::OP_ADD, Precedence::TERM)),
+            TokenType::MINUS => Some((OpCode::OP_SUBTRACT, Precedence::TERM)),
+            TokenType::SLASH => Some((OpCode::OP_DIVIDE, Precedence::FACTOR)),
+            TokenType::STAR => Some((OpCode::OP_MULTIPLY, Precedence::FACTOR)),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 enum Precedence {
@@ -181,40 +178,6 @@ enum Precedence {
     UNARY = 17,
     CALL = 19,
     PRIMARY = 21,
-}
-
-impl Precedence {
-    fn prefix_binding_power(&self) -> ((), u8) {
-        match self {
-            Precedence::UNARY => {
-                let bp = *self as u8;
-                ((), bp)
-            }
-            _ => panic!("unknown prefix operator"),
-        }
-    }
-
-    fn infix_binding_power(&self) -> Option<(u8, u8)> {
-        match self {
-            Precedence::ASSIGNMENT | Precedence::TERM | Precedence::FACTOR => {
-                let bp = *self as u8;
-                Some((bp, bp + 1))
-            }
-            _ => None,
-        }
-    }
-}
-
-impl From<Token> for Precedence {
-    fn from(value: Token) -> Self {
-        match value.typ() {
-            // FIXME: this is slightly incorrect as `MINUS`
-            // can also be used as an unary operator
-            TokenType::PLUS | TokenType::MINUS => Self::TERM,
-            TokenType::STAR | TokenType::SLASH => Self::FACTOR,
-            _ => Self::NONE,
-        }
-    }
 }
 
 /// Temporary wrapper that prints and skips scanner errors so we can focus on
@@ -254,25 +217,6 @@ mod tests {
 
     use super::{Parser, Precedence};
     use crate::chunk::{Chunk, OpCode};
-
-    #[rstest]
-    #[case::none(Precedence::NONE, None)]
-    #[case::assignment(Precedence::ASSIGNMENT, Some((3, 4)))]
-    #[case::or(Precedence::OR, None)]
-    #[case::and(Precedence::AND, None)]
-    #[case::equality(Precedence::EQUALITY, None)]
-    #[case::comparison(Precedence::COMPARISON, None)]
-    #[case::term(Precedence::TERM, Some((13, 14)))]
-    #[case::factor(Precedence::FACTOR, Some((15, 16)))]
-    #[case::unary(Precedence::UNARY, None)]
-    #[case::call(Precedence::CALL, None)]
-    #[case::primary(Precedence::PRIMARY, None)]
-    fn infix_binding_power_returns_expected_pair(
-        #[case] prec: Precedence,
-        #[case] expected: Option<(u8, u8)>,
-    ) {
-        assert_eq!(prec.infix_binding_power(), expected);
-    }
 
     #[test]
     fn parse_empty_source_succeeds() {
@@ -453,5 +397,121 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(chunk.code(), expected_code);
         assert_eq!(chunk.values(), expected_values);
+    }
+
+    use crate::scanner::token::{Token, TokenType};
+
+    #[test]
+    fn token_prefix_rule_returns_negate_with_unary_precedence() {
+        let token = Token::new(0, 1, TokenType::MINUS, 1);
+
+        assert_eq!(
+            token.prefix_rule(),
+            Some((OpCode::OP_NEGATE, Precedence::UNARY))
+        );
+    }
+
+    #[rstest]
+    #[case::left_paren(TokenType::LEFT_PAREN)]
+    #[case::right_paren(TokenType::RIGHT_PAREN)]
+    #[case::left_brace(TokenType::LEFT_BRACE)]
+    #[case::right_brace(TokenType::RIGHT_BRACE)]
+    #[case::comma(TokenType::COMMA)]
+    #[case::dot(TokenType::DOT)]
+    #[case::plus(TokenType::PLUS)]
+    #[case::semicolon(TokenType::SEMICOLON)]
+    #[case::slash(TokenType::SLASH)]
+    #[case::star(TokenType::STAR)]
+    #[case::bang(TokenType::BANG)]
+    #[case::bang_equal(TokenType::BANG_EQUAL)]
+    #[case::equal(TokenType::EQUAL)]
+    #[case::equal_equal(TokenType::EQUAL_EQUAL)]
+    #[case::greater(TokenType::GREATER)]
+    #[case::greater_equal(TokenType::GREATER_EQUAL)]
+    #[case::less(TokenType::LESS)]
+    #[case::less_equal(TokenType::LESS_EQUAL)]
+    #[case::identifier(TokenType::IDENTIFIER)]
+    #[case::string(TokenType::STRING)]
+    #[case::number(TokenType::NUMBER)]
+    #[case::and(TokenType::AND)]
+    #[case::class(TokenType::CLASS)]
+    #[case::else_token(TokenType::ELSE)]
+    #[case::false_token(TokenType::FALSE)]
+    #[case::for_token(TokenType::FOR)]
+    #[case::fun(TokenType::FUN)]
+    #[case::if_token(TokenType::IF)]
+    #[case::nil(TokenType::NIL)]
+    #[case::or(TokenType::OR)]
+    #[case::print(TokenType::PRINT)]
+    #[case::return_token(TokenType::RETURN)]
+    #[case::super_token(TokenType::SUPER)]
+    #[case::this(TokenType::THIS)]
+    #[case::true_token(TokenType::TRUE)]
+    #[case::var(TokenType::VAR)]
+    #[case::while_token(TokenType::WHILE)]
+    #[case::eof(TokenType::EOF)]
+    #[case::nat(TokenType::NAT)]
+    fn token_prefix_rule_returns_none_for_unsupported_tokens(#[case] typ: TokenType) {
+        let token = Token::new(0, 1, typ, 1);
+
+        assert_eq!(token.prefix_rule(), None);
+    }
+
+    #[rstest]
+    #[case::plus(TokenType::PLUS, OpCode::OP_ADD, Precedence::TERM)]
+    #[case::minus(TokenType::MINUS, OpCode::OP_SUBTRACT, Precedence::TERM)]
+    #[case::slash(TokenType::SLASH, OpCode::OP_DIVIDE, Precedence::FACTOR)]
+    #[case::star(TokenType::STAR, OpCode::OP_MULTIPLY, Precedence::FACTOR)]
+    fn token_infix_rule_returns_opcode_and_precedence(
+        #[case] typ: TokenType,
+        #[case] opcode: OpCode,
+        #[case] precedence: Precedence,
+    ) {
+        let token = Token::new(0, 1, typ, 1);
+
+        assert_eq!(token.infix_rule(), Some((opcode, precedence)));
+    }
+
+    #[rstest]
+    #[case::left_paren(TokenType::LEFT_PAREN)]
+    #[case::right_paren(TokenType::RIGHT_PAREN)]
+    #[case::left_brace(TokenType::LEFT_BRACE)]
+    #[case::right_brace(TokenType::RIGHT_BRACE)]
+    #[case::comma(TokenType::COMMA)]
+    #[case::dot(TokenType::DOT)]
+    #[case::semicolon(TokenType::SEMICOLON)]
+    #[case::bang(TokenType::BANG)]
+    #[case::bang_equal(TokenType::BANG_EQUAL)]
+    #[case::equal(TokenType::EQUAL)]
+    #[case::equal_equal(TokenType::EQUAL_EQUAL)]
+    #[case::greater(TokenType::GREATER)]
+    #[case::greater_equal(TokenType::GREATER_EQUAL)]
+    #[case::less(TokenType::LESS)]
+    #[case::less_equal(TokenType::LESS_EQUAL)]
+    #[case::identifier(TokenType::IDENTIFIER)]
+    #[case::string(TokenType::STRING)]
+    #[case::number(TokenType::NUMBER)]
+    #[case::and(TokenType::AND)]
+    #[case::class(TokenType::CLASS)]
+    #[case::else_token(TokenType::ELSE)]
+    #[case::false_token(TokenType::FALSE)]
+    #[case::for_token(TokenType::FOR)]
+    #[case::fun(TokenType::FUN)]
+    #[case::if_token(TokenType::IF)]
+    #[case::nil(TokenType::NIL)]
+    #[case::or(TokenType::OR)]
+    #[case::print(TokenType::PRINT)]
+    #[case::return_token(TokenType::RETURN)]
+    #[case::super_token(TokenType::SUPER)]
+    #[case::this(TokenType::THIS)]
+    #[case::true_token(TokenType::TRUE)]
+    #[case::var(TokenType::VAR)]
+    #[case::while_token(TokenType::WHILE)]
+    #[case::eof(TokenType::EOF)]
+    #[case::nat(TokenType::NAT)]
+    fn token_infix_rule_returns_none_for_unsupported_tokens(#[case] typ: TokenType) {
+        let token = Token::new(0, 1, typ, 1);
+
+        assert_eq!(token.infix_rule(), None);
     }
 }
