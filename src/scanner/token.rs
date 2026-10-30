@@ -30,16 +30,6 @@ impl Token {
         }
     }
 
-    /// Creates an end-of-file token at the given line.
-    pub fn not_a_token() -> Self {
-        Self {
-            start: 0,
-            end: 0,
-            typ: TokenType::NAT,
-            line: 0,
-        }
-    }
-
     /// Returns the token's type.
     pub fn typ(&self) -> TokenType {
         self.typ
@@ -57,7 +47,7 @@ impl Token {
 
     /// Returns the token's lexeme within the source text.
     pub fn lexeme<'s>(&self, source: &'s str) -> &'s str {
-        debug_assert!(!matches!(self.typ, TokenType::EOF | TokenType::NAT));
+        debug_assert!(!matches!(self.typ, TokenType::EOF));
         &source[self.start..self.end]
     }
 }
@@ -112,8 +102,7 @@ pub enum TokenType {
     WHILE,
 
     // Signals
-    EOF, // end of file
-    NAT, // not a token
+    EOF,
 }
 
 #[cfg(test)]

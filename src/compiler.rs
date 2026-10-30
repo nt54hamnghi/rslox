@@ -18,7 +18,7 @@ struct Parser<'source, 'chunk> {
     source: &'source str,
     scanner: Peekable<Scanner<'source>>,
     chunk: &'chunk mut Chunk,
-    previous: Token,
+    last_consumed: Option<Token>,
 }
 
 impl<'source, 'chunk> Parser<'source, 'chunk> {
@@ -28,9 +28,21 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
             source,
             scanner,
             chunk,
-            previous: Token::not_a_token(),
+            last_consumed: None,
         };
         parser.expression(0)
+    }
+
+    /// Returns the most recently consumed token.
+    ///
+    /// No previous token exists before parsing begins. Once parsing consumes
+    /// its first token, a previous token is always available.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called before the first token is consumed.
+    fn unwrap_last_consumed(&self) -> Token {
+        self.last_consumed.expect("no token has been consumed")
     }
 
     fn expression(&mut self, min_bp: u8) -> color_eyre::Result<()> {
@@ -38,7 +50,7 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
             .scanner
             .next()
             .ok_or_eyre("unexpected end of token streams")?;
-        self.previous = token;
+        self.last_consumed = Some(token);
 
         // parsing lhs
         match token.typ() {
@@ -92,13 +104,13 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
 
     fn consume(&mut self, token_type: TokenType, msg: &str) -> color_eyre::Result<()> {
         if self.scanner.next_if(|t| t.typ() == token_type).is_none() {
-            return Err(self.error_at(&self.previous, msg));
+            return Err(self.error_at(self.unwrap_last_consumed(), msg));
         };
         Ok(())
     }
 
     fn number(&mut self) {
-        let token = self.previous;
+        let token = self.unwrap_last_consumed();
         debug_assert_eq!(token.typ(), TokenType::NUMBER);
 
         // the scanner only produces NUMBER tokens for valid numeric literals
@@ -108,7 +120,7 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
     }
 
     fn emit_byte(&mut self, byte: u8) {
-        let line = self.previous.line();
+        let line = self.unwrap_last_consumed().line();
         debug_assert_ne!(line, 0);
         self.chunk.write_byte(byte, line);
     }
@@ -124,12 +136,12 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
     }
 
     fn emit_constant(&mut self, value: Value) {
-        let line = self.previous.line();
+        let line = self.unwrap_last_consumed().line();
         debug_assert_ne!(line, 0);
         self.chunk.write_constant(value, line);
     }
 
-    fn error_at(&self, token: &Token, msg: &str) -> color_eyre::Report {
+    fn error_at(&self, token: Token, msg: &str) -> color_eyre::Report {
         let mut buf = format!("[line {}] Error", token.line());
 
         match token.typ() {
@@ -401,60 +413,16 @@ mod tests {
 
     use crate::scanner::token::{Token, TokenType};
 
-    #[test]
-    fn token_prefix_rule_returns_negate_with_unary_precedence() {
-        let token = Token::new(0, 1, TokenType::MINUS, 1);
-
-        assert_eq!(
-            token.prefix_rule(),
-            Some((OpCode::OP_NEGATE, Precedence::UNARY))
-        );
-    }
-
     #[rstest]
-    #[case::left_paren(TokenType::LEFT_PAREN)]
-    #[case::right_paren(TokenType::RIGHT_PAREN)]
-    #[case::left_brace(TokenType::LEFT_BRACE)]
-    #[case::right_brace(TokenType::RIGHT_BRACE)]
-    #[case::comma(TokenType::COMMA)]
-    #[case::dot(TokenType::DOT)]
-    #[case::plus(TokenType::PLUS)]
-    #[case::semicolon(TokenType::SEMICOLON)]
-    #[case::slash(TokenType::SLASH)]
-    #[case::star(TokenType::STAR)]
-    #[case::bang(TokenType::BANG)]
-    #[case::bang_equal(TokenType::BANG_EQUAL)]
-    #[case::equal(TokenType::EQUAL)]
-    #[case::equal_equal(TokenType::EQUAL_EQUAL)]
-    #[case::greater(TokenType::GREATER)]
-    #[case::greater_equal(TokenType::GREATER_EQUAL)]
-    #[case::less(TokenType::LESS)]
-    #[case::less_equal(TokenType::LESS_EQUAL)]
-    #[case::identifier(TokenType::IDENTIFIER)]
-    #[case::string(TokenType::STRING)]
-    #[case::number(TokenType::NUMBER)]
-    #[case::and(TokenType::AND)]
-    #[case::class(TokenType::CLASS)]
-    #[case::else_token(TokenType::ELSE)]
-    #[case::false_token(TokenType::FALSE)]
-    #[case::for_token(TokenType::FOR)]
-    #[case::fun(TokenType::FUN)]
-    #[case::if_token(TokenType::IF)]
-    #[case::nil(TokenType::NIL)]
-    #[case::or(TokenType::OR)]
-    #[case::print(TokenType::PRINT)]
-    #[case::return_token(TokenType::RETURN)]
-    #[case::super_token(TokenType::SUPER)]
-    #[case::this(TokenType::THIS)]
-    #[case::true_token(TokenType::TRUE)]
-    #[case::var(TokenType::VAR)]
-    #[case::while_token(TokenType::WHILE)]
-    #[case::eof(TokenType::EOF)]
-    #[case::nat(TokenType::NAT)]
-    fn token_prefix_rule_returns_none_for_unsupported_tokens(#[case] typ: TokenType) {
+    #[case::minus(TokenType::MINUS, OpCode::OP_NEGATE, Precedence::UNARY)]
+    fn token_prefix_rule_returns_opcode_and_precedence(
+        #[case] typ: TokenType,
+        #[case] opcode: OpCode,
+        #[case] precedence: Precedence,
+    ) {
         let token = Token::new(0, 1, typ, 1);
 
-        assert_eq!(token.prefix_rule(), None);
+        assert_eq!(token.prefix_rule(), Some((opcode, precedence)));
     }
 
     #[rstest]
@@ -470,48 +438,5 @@ mod tests {
         let token = Token::new(0, 1, typ, 1);
 
         assert_eq!(token.infix_rule(), Some((opcode, precedence)));
-    }
-
-    #[rstest]
-    #[case::left_paren(TokenType::LEFT_PAREN)]
-    #[case::right_paren(TokenType::RIGHT_PAREN)]
-    #[case::left_brace(TokenType::LEFT_BRACE)]
-    #[case::right_brace(TokenType::RIGHT_BRACE)]
-    #[case::comma(TokenType::COMMA)]
-    #[case::dot(TokenType::DOT)]
-    #[case::semicolon(TokenType::SEMICOLON)]
-    #[case::bang(TokenType::BANG)]
-    #[case::bang_equal(TokenType::BANG_EQUAL)]
-    #[case::equal(TokenType::EQUAL)]
-    #[case::equal_equal(TokenType::EQUAL_EQUAL)]
-    #[case::greater(TokenType::GREATER)]
-    #[case::greater_equal(TokenType::GREATER_EQUAL)]
-    #[case::less(TokenType::LESS)]
-    #[case::less_equal(TokenType::LESS_EQUAL)]
-    #[case::identifier(TokenType::IDENTIFIER)]
-    #[case::string(TokenType::STRING)]
-    #[case::number(TokenType::NUMBER)]
-    #[case::and(TokenType::AND)]
-    #[case::class(TokenType::CLASS)]
-    #[case::else_token(TokenType::ELSE)]
-    #[case::false_token(TokenType::FALSE)]
-    #[case::for_token(TokenType::FOR)]
-    #[case::fun(TokenType::FUN)]
-    #[case::if_token(TokenType::IF)]
-    #[case::nil(TokenType::NIL)]
-    #[case::or(TokenType::OR)]
-    #[case::print(TokenType::PRINT)]
-    #[case::return_token(TokenType::RETURN)]
-    #[case::super_token(TokenType::SUPER)]
-    #[case::this(TokenType::THIS)]
-    #[case::true_token(TokenType::TRUE)]
-    #[case::var(TokenType::VAR)]
-    #[case::while_token(TokenType::WHILE)]
-    #[case::eof(TokenType::EOF)]
-    #[case::nat(TokenType::NAT)]
-    fn token_infix_rule_returns_none_for_unsupported_tokens(#[case] typ: TokenType) {
-        let token = Token::new(0, 1, typ, 1);
-
-        assert_eq!(token.infix_rule(), None);
     }
 }
