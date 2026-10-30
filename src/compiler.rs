@@ -30,7 +30,9 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
             chunk,
             last_consumed: None,
         };
-        parser.expression(0)
+        parser.expression(0)?;
+        parser.emit_opcode(OpCode::OP_RETURN);
+        Ok(())
     }
 
     /// Returns the most recently consumed token.

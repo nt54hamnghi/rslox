@@ -7,7 +7,8 @@
         },
         "request": "launch",
         "program": "$ZED_WORKTREE_ROOT/target/debug/rslox",
-        "args": ["run"],
+        "args": ["./temp/test.lox"],
+        "cwd": "$ZED_WORKTREE_ROOT",
         "adapter": "CodeLLDB",
         // sourceLanguages is required for CodeLLDB (not GDB) when using Rust
         "sourceLanguages": ["rust"],
