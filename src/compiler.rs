@@ -18,61 +18,57 @@ struct Parser<'source, 'chunk> {
     source: &'source str,
     scanner: Peekable<Scanner<'source>>,
     chunk: &'chunk mut Chunk,
-    last_consumed: Option<Token>,
+    current: Token,
 }
 
 impl<'source, 'chunk> Parser<'source, 'chunk> {
     fn parse(source: &'source str, chunk: &'chunk mut Chunk) -> color_eyre::Result<()> {
         let mut scanner = Scanner::new(source).peekable();
+        let Some(current) = scanner.next() else {
+            panic!("scanner terminated without producing an EOF token")
+        };
         let mut parser = Self {
             source,
             scanner,
             chunk,
-            last_consumed: None,
+            current,
         };
-        parser.expression(0)?;
+        parser.expr(0)?;
         parser.emit_opcode(OpCode::OP_RETURN);
         Ok(())
     }
 
-    /// Returns the most recently consumed token.
-    ///
-    /// No previous token exists before parsing begins. Once parsing consumes
-    /// its first token, a previous token is always available.
-    ///
-    /// # Panics
-    ///
-    /// Panics if called before the first token is consumed.
-    fn unwrap_last_consumed(&self) -> Token {
-        self.last_consumed.expect("no token has been consumed")
-    }
-
-    fn expression(&mut self, min_bp: u8) -> color_eyre::Result<()> {
-        let token = self
+    /// Advances to the next token, then parses an expression with minimum binding power `min_bp`.
+    /// Returns an error if the scanner is exhausted or parsing fails.
+    fn advance_expr(&mut self, min_bp: u8) -> color_eyre::Result<()> {
+        self.current = self
             .scanner
             .next()
             .ok_or_eyre("unexpected end of token streams")?;
-        self.last_consumed = Some(token);
+        self.expr(min_bp)
+    }
+
+    fn expr(&mut self, min_bp: u8) -> color_eyre::Result<()> {
+        let token = self.current;
 
         // parsing lhs
         match token.typ() {
             TokenType::EOF => return Ok(()),
-            TokenType::LEFT_PAREN => self.grouping()?,
             TokenType::NUMBER => self.number(),
+            TokenType::LEFT_PAREN => self.grouping()?,
             _ => {
                 if let Some((opcode, prec)) = token.prefix_rule() {
                     let rbp = prec as u8 + 1;
-                    self.expression(rbp)?;
+                    self.advance_expr(rbp)?;
                     self.emit_opcode(opcode);
                 }
             }
         };
 
         loop {
-            let token = *self
-                .scanner
-                .peek()
-                .ok_or_eyre("unexpected end of token streams")?;
+            let Some(token) = self.scanner.peek() else {
+                break;
+            };
 
             if let Some((opcode, prec)) = token.infix_rule() {
                 let (lbp, rbp) = match prec {
@@ -86,7 +82,7 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
 
                 // consumed the operator token
                 self.scanner.next().unwrap();
-                self.expression(rbp)?;
+                self.advance_expr(rbp)?;
                 self.emit_opcode(opcode);
 
                 continue;
@@ -99,20 +95,20 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
     }
 
     fn grouping(&mut self) -> Result<(), color_eyre::eyre::Error> {
-        self.expression(0)?;
+        self.advance_expr(0)?;
         self.consume(TokenType::RIGHT_PAREN, "Expect ')' after expression.")?;
         Ok(())
     }
 
     fn consume(&mut self, token_type: TokenType, msg: &str) -> color_eyre::Result<()> {
         if self.scanner.next_if(|t| t.typ() == token_type).is_none() {
-            return Err(self.error_at(self.unwrap_last_consumed(), msg));
+            return Err(self.error_at(self.current, msg));
         };
         Ok(())
     }
 
     fn number(&mut self) {
-        let token = self.unwrap_last_consumed();
+        let token = self.current;
         debug_assert_eq!(token.typ(), TokenType::NUMBER);
 
         // the scanner only produces NUMBER tokens for valid numeric literals
@@ -122,7 +118,7 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
     }
 
     fn emit_byte(&mut self, byte: u8) {
-        let line = self.unwrap_last_consumed().line();
+        let line = self.current.line();
         debug_assert_ne!(line, 0);
         self.chunk.write_byte(byte, line);
     }
@@ -138,7 +134,7 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
     }
 
     fn emit_constant(&mut self, value: Value) {
-        let line = self.unwrap_last_consumed().line();
+        let line = self.current.line();
         debug_assert_ne!(line, 0);
         self.chunk.write_constant(value, line);
     }
@@ -231,6 +227,7 @@ mod tests {
 
     use super::{Parser, Precedence};
     use crate::chunk::{Chunk, OpCode};
+    use crate::scanner::token::{Token, TokenType};
 
     #[test]
     fn parse_empty_source_succeeds() {
@@ -238,7 +235,7 @@ mod tests {
         let result = Parser::parse("", &mut chunk);
 
         assert!(result.is_ok());
-        assert!(chunk.code().is_empty());
+        assert_eq!(chunk.code(), &[OpCode::OP_RETURN as u8]);
         assert!(chunk.values().is_empty());
     }
 
@@ -248,7 +245,10 @@ mod tests {
         let result = Parser::parse("42", &mut chunk);
 
         assert!(result.is_ok());
-        assert_eq!(chunk.code(), &[OpCode::OP_CONSTANT as u8, 0]);
+        assert_eq!(
+            chunk.code(),
+            &[OpCode::OP_CONSTANT as u8, 0, OpCode::OP_RETURN as u8]
+        );
         assert_eq!(chunk.values(), &[42.0]);
     }
 
@@ -260,7 +260,12 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(
             chunk.code(),
-            &[OpCode::OP_CONSTANT as u8, 0, OpCode::OP_NEGATE as u8]
+            &[
+                OpCode::OP_CONSTANT as u8,
+                0,
+                OpCode::OP_NEGATE as u8,
+                OpCode::OP_RETURN as u8,
+            ]
         );
         assert_eq!(chunk.values(), &[42.0]);
     }
@@ -284,6 +289,7 @@ mod tests {
                 OpCode::OP_CONSTANT as u8,
                 1,
                 binary_op as u8,
+                OpCode::OP_RETURN as u8,
             ]
         );
         assert_eq!(chunk.values(), &[8.0, 2.0]);
@@ -310,6 +316,7 @@ mod tests {
                 OpCode::OP_CONSTANT as u8,
                 1,
                 opcode as u8,
+                OpCode::OP_RETURN as u8,
             ]
         );
         assert_eq!(chunk.values(), &[8.0, 2.0]);
@@ -340,6 +347,7 @@ mod tests {
                 2,
                 higher_prec as u8,
                 lower_prec as u8,
+                OpCode::OP_RETURN as u8,
             ]
         );
         assert_eq!(chunk.values(), &[1.0, 2.0, 3.0]);
@@ -374,32 +382,35 @@ mod tests {
                 OpCode::OP_CONSTANT as u8,
                 2,
                 second_op as u8,
+                OpCode::OP_RETURN as u8,
             ]
         );
         assert_eq!(chunk.values(), &[8.0, 4.0, 2.0]);
     }
 
     #[rstest]
-    #[case::single_number("(8)", &[OpCode::OP_CONSTANT as u8, 0], &[8.0])]
-    #[case::nested_group("((8))", &[OpCode::OP_CONSTANT as u8, 0], &[8.0])]
+    #[case::single_number("(8)", &[OpCode::OP_CONSTANT as u8, 0, OpCode::OP_RETURN as u8], &[8.0])]
+    #[case::nested_group("((8))", &[OpCode::OP_CONSTANT as u8, 0, OpCode::OP_RETURN as u8], &[8.0])]
     #[case::precedence(
-            "(8 + 4) * 2",
-            &[OpCode::OP_CONSTANT as u8, 0, OpCode::OP_CONSTANT as u8, 1,
-              OpCode::OP_ADD as u8, OpCode::OP_CONSTANT as u8, 2, OpCode::OP_MULTIPLY as u8],
-            &[8.0, 4.0, 2.0],
-        )]
+                "(8 + 4) * 2",
+                &[OpCode::OP_CONSTANT as u8, 0, OpCode::OP_CONSTANT as u8, 1,
+                  OpCode::OP_ADD as u8, OpCode::OP_CONSTANT as u8, 2, OpCode::OP_MULTIPLY as u8,
+                  OpCode::OP_RETURN as u8],
+                &[8.0, 4.0, 2.0],
+            )]
     #[case::associativity(
-            "8 - (4 - 2)",
-            &[OpCode::OP_CONSTANT as u8, 0, OpCode::OP_CONSTANT as u8, 1,
-              OpCode::OP_CONSTANT as u8, 2, OpCode::OP_SUBTRACT as u8, OpCode::OP_SUBTRACT as u8],
-            &[8.0, 4.0, 2.0],
-        )]
+                "8 - (4 - 2)",
+                &[OpCode::OP_CONSTANT as u8, 0, OpCode::OP_CONSTANT as u8, 1,
+                  OpCode::OP_CONSTANT as u8, 2, OpCode::OP_SUBTRACT as u8, OpCode::OP_SUBTRACT as u8,
+                  OpCode::OP_RETURN as u8],
+                &[8.0, 4.0, 2.0],
+            )]
     #[case::unary(
-            "-(8 + 4)",
-            &[OpCode::OP_CONSTANT as u8, 0, OpCode::OP_CONSTANT as u8, 1,
-              OpCode::OP_ADD as u8, OpCode::OP_NEGATE as u8],
-            &[8.0, 4.0],
-        )]
+                "-(8 + 4)",
+                &[OpCode::OP_CONSTANT as u8, 0, OpCode::OP_CONSTANT as u8, 1,
+                  OpCode::OP_ADD as u8, OpCode::OP_NEGATE as u8, OpCode::OP_RETURN as u8],
+                &[8.0, 4.0],
+            )]
     fn parse_grouped_expression(
         #[case] source: &str,
         #[case] expected_code: &[u8],
@@ -412,8 +423,6 @@ mod tests {
         assert_eq!(chunk.code(), expected_code);
         assert_eq!(chunk.values(), expected_values);
     }
-
-    use crate::scanner::token::{Token, TokenType};
 
     #[rstest]
     #[case::minus(TokenType::MINUS, OpCode::OP_NEGATE, Precedence::UNARY)]
