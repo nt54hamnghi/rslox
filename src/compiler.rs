@@ -58,7 +58,7 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
             TokenType::LEFT_PAREN => self.grouping()?,
             _ => {
                 if let Some((opcode, prec)) = token.prefix_rule() {
-                    let rbp = prec as u8 + 1;
+                    let rbp = prec as u8;
                     self.advance_expr(rbp)?;
                     self.emit_opcode(opcode);
                 }

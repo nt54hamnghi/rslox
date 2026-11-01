@@ -69,8 +69,7 @@ impl<'chunk> VM<'chunk> {
 
             #[cfg(feature = "trace")]
             {
-                // self.read_byte advances ip by 1, so ip currently
-                // no longer points to the opcode
+                // `self.read_byte` advances ip by 1, so ip is after the opcode.
                 self.chunk.disasemble_instruction(self.ip - 1, opcode);
                 self.debug_stack();
             }
@@ -101,7 +100,7 @@ impl<'chunk> VM<'chunk> {
         }
     }
 
-    #[allow(unused)]
+    #[cfg(feature = "trace")]
     fn debug_stack(&self) {
         print!("{:10}", "");
         for v in self.stack.as_slice() {
