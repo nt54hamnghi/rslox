@@ -17,9 +17,9 @@ pub struct Scanner<'source> {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("[line {line}] Error: Unterminated string")]
+    #[error("[line {line}] error: unterminated string")]
     UnterminatedString { line: usize },
-    #[error("[line {line}] Error: Unexpected character '{char}'")]
+    #[error("[line {line}] error: unexpected character '{char}'")]
     UnexpectedCharacter { char: char, line: usize },
 }
 

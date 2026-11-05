@@ -162,7 +162,7 @@ impl Chunk {
     /// # Panics
     ///
     /// Panics if `offset` is greater than or equal to the bytecode length.
-    fn get_line(&self, offset: usize) -> usize {
+    pub fn get_line(&self, offset: usize) -> usize {
         assert!(offset < self.code().len());
 
         let mut start = 0;
@@ -195,6 +195,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::chunk::LineStart;
+    use crate::value::Value;
 
     use super::{Chunk, OpCode};
 
@@ -332,18 +333,18 @@ mod tests {
     fn add_constant_returns_its_index() {
         let mut chunk = Chunk::new();
 
-        assert_eq!(chunk.add_constant(1.5), 0);
-        assert_eq!(chunk.add_constant(-2.0), 1);
-        assert_eq!(chunk.constants, [1.5, -2.0]);
+        assert_eq!(chunk.add_constant(1.5.into()), 0);
+        assert_eq!(chunk.add_constant((-2.0).into()), 1);
+        assert_eq!(chunk.constants, [1.5, -2.0].map(Value::from));
     }
 
     #[test]
     fn write_constant_adds_the_value_and_its_instruction() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(8.5, 0);
+        chunk.write_constant(8.5.into(), 0);
 
         assert_eq!(chunk.code, [OpCode::OP_CONSTANT as u8, 0]);
-        assert_eq!(chunk.constants, [8.5]);
+        assert_eq!(chunk.constants, [Value::from(8.5)]);
         assert_eq!(chunk.lines, [LineStart { offset: 0, line: 0 }]);
     }
 
@@ -358,12 +359,12 @@ mod tests {
         #[case] operands: Vec<u8>,
     ) {
         let mut chunk = Chunk::new();
-        chunk.constants.resize(index, 0.0);
+        chunk.constants.resize(index, 0.0.into());
 
-        chunk.write_constant(8.5, 42);
+        chunk.write_constant(8.5.into(), 42);
 
         assert_eq!(chunk.constants.len(), index + 1);
-        assert_eq!(chunk.constants[index], 8.5);
+        assert_eq!(chunk.constants[index], 8.5.into());
 
         let mut expected = vec![opcode as u8];
         expected.extend(operands);
@@ -381,8 +382,8 @@ mod tests {
     #[should_panic(expected = "assertion failed: idx < 2usize.pow(24)")]
     fn write_constant_rejects_an_index_larger_than_24_bits() {
         let mut chunk = Chunk::new();
-        chunk.constants.resize(0x01_00_00_00, 0.0);
+        chunk.constants.resize(0x01_00_00_00, 0.0.into());
 
-        chunk.write_constant(8.5, 42);
+        chunk.write_constant(8.5.into(), 42);
     }
 }

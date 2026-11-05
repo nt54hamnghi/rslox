@@ -42,7 +42,7 @@ fn repl() -> color_eyre::Result<()> {
 fn run_file(path: impl AsRef<Path>) -> color_eyre::Result<()> {
     let source = fs::read_to_string(path)?;
     match VM::interpret(&source) {
-        Ok(_) => Ok(()),
+        Ok(()) => Ok(()),
         Err(err) => match err {
             // TODO: handle inner error
             Error::Compile(_) => exit(65),

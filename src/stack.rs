@@ -42,6 +42,10 @@ impl<T, const N: usize> Stack<T, N> {
         self.len() == 0
     }
 
+    pub fn clear(&mut self) {
+        self.top = 0;
+    }
+
     pub fn push(&mut self, value: T) -> Result<(), StackOverflow> {
         self.inner
             .get_mut(self.top)
@@ -60,13 +64,30 @@ impl<T, const N: usize> Stack<T, N> {
 
         // SAFETY:
         // By the type invariant, after `top` is decremented, the slot at
-        // `top`is considered uninitialized.
+        // `top` is considered uninitialized.
         //
         // `assume_init_read` returns a bitwise copy whose ownership is
         // transferred to the caller. A subsequent push will overwrite the
         // slot at `top` with `MaybeUninit::write`, which doesn't drop the
         // existing `T`, so there won't be a double drop.
         let value = unsafe { self.inner[self.top].assume_init_read() };
+        Some(value)
+    }
+
+    /// Returns a reference to the value at `distance` from the top of the stack.
+    ///
+    /// A distance of `0` returns the top value, `1` returns the value directly
+    /// below it, and so on. Returns `None` if `distance` is outside the stack's
+    /// initialized values.
+    pub fn peek(&self, distance: usize) -> Option<&T> {
+        if distance >= self.len() {
+            return None;
+        }
+
+        // SAFETY:
+        // Since `distance < top`, `top - 1 - distance` indexes a slot in
+        // `inner[..top]`, which is initialized by the type invariant.
+        let value = unsafe { self.inner[self.top - 1 - distance].assume_init_ref() };
         Some(value)
     }
 }
@@ -174,6 +195,103 @@ mod tests {
         assert_eq!(stack.len(), 0);
         assert_eq!(stack.as_slice(), &[]);
         assert_eq!(out, expected_order);
+    }
+
+    #[rstest]
+    #[case(&[])]
+    #[case(&[10])]
+    #[case(&[10, 20, 30])]
+    fn clear_empties_stack_and_allows_reuse(#[case] values: &[i32]) {
+        let mut stack = Stack::<i32, 3>::new();
+        for &value in values {
+            stack.push(value).unwrap();
+        }
+
+        stack.clear();
+
+        assert!(stack.is_empty());
+        assert_eq!(stack.len(), 0);
+        assert_eq!(stack.as_slice(), &[]);
+        assert_eq!(stack.pop(), None);
+        assert_eq!(stack.peek(0), None);
+
+        for value in [40, 50, 60] {
+            stack.push(value).unwrap();
+        }
+        assert_eq!(stack.as_slice(), &[40, 50, 60]);
+        assert_eq!(stack.pop(), Some(60));
+    }
+
+    #[test]
+    fn clear_with_zero_capacity() {
+        let mut stack = Stack::<i32, 0>::new();
+        stack.clear();
+
+        assert!(stack.is_empty());
+        assert_eq!(stack.len(), 0);
+        assert_eq!(stack.as_slice(), &[]);
+    }
+
+    #[test]
+    fn peek_with_zero_capacity() {
+        let stack = Stack::<i32, 0>::new();
+
+        assert_eq!(stack.peek(0), None);
+        assert_eq!(stack.peek(1), None);
+    }
+
+    #[rstest]
+    #[case(0, 30)]
+    #[case(1, 20)]
+    #[case(2, 10)]
+    fn peek_borrows_from_top_without_consuming(#[case] distance: usize, #[case] expected: i32) {
+        let mut stack = Stack::<i32, 3>::new();
+        for value in [10, 20, 30] {
+            stack.push(value).unwrap();
+        }
+
+        assert_eq!(stack.peek(distance), Some(&expected));
+        assert_eq!(stack.len(), 3);
+        assert_eq!(stack.as_slice(), &[10, 20, 30]);
+    }
+
+    #[test]
+    fn peek_borrows_new_top_after_pop() {
+        let mut stack = Stack::<i32, 3>::new();
+        for value in [10, 20, 30] {
+            stack.push(value).unwrap();
+        }
+        stack.pop().unwrap();
+
+        assert_eq!(stack.peek(0), Some(&20));
+    }
+
+    #[test]
+    fn peek_borrows_replacement_after_push_reuses_popped_slot() {
+        let mut stack = Stack::<i32, 3>::new();
+        for value in [10, 20, 30] {
+            stack.push(value).unwrap();
+        }
+        stack.pop().unwrap();
+        stack.push(40).unwrap();
+
+        assert_eq!(stack.peek(0), Some(&40));
+    }
+
+    #[rstest]
+    #[case(&[], 0)]
+    #[case(&[], 1)]
+    #[case(&[10], 1)]
+    #[case(&[10], 2)]
+    #[case(&[10, 20, 30], 3)]
+    fn peek_returns_none_outside_live_values(#[case] values: &[i32], #[case] distance: usize) {
+        let mut stack = Stack::<i32, 3>::new();
+        for &value in values {
+            stack.push(value).unwrap();
+        }
+
+        assert_eq!(stack.peek(distance), None);
+        assert_eq!(stack.as_slice(), values);
     }
 
     #[test]

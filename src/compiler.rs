@@ -96,14 +96,7 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
 
     fn grouping(&mut self) -> Result<(), color_eyre::eyre::Error> {
         self.advance_expr(0)?;
-        self.consume(TokenType::RIGHT_PAREN, "Expect ')' after expression.")?;
-        Ok(())
-    }
-
-    fn consume(&mut self, token_type: TokenType, msg: &str) -> color_eyre::Result<()> {
-        if self.scanner.next_if(|t| t.typ() == token_type).is_none() {
-            return Err(self.error_at(self.current, msg));
-        };
+        self.consume(TokenType::RIGHT_PAREN, "expect ')' after expression")?;
         Ok(())
     }
 
@@ -113,8 +106,15 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
 
         // the scanner only produces NUMBER tokens for valid numeric literals
         let lexeme = token.lexeme(self.source);
-        let value = lexeme.parse::<f64>().unwrap();
-        self.emit_constant(value);
+        let number = lexeme.parse::<f64>().unwrap();
+        self.emit_constant(number.into());
+    }
+
+    fn consume(&mut self, token_type: TokenType, msg: &str) -> color_eyre::Result<()> {
+        if self.scanner.next_if(|t| t.typ() == token_type).is_none() {
+            return Err(self.error_at(self.current, msg));
+        };
+        Ok(())
     }
 
     fn emit_byte(&mut self, byte: u8) {
@@ -140,7 +140,7 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
     }
 
     fn error_at(&self, token: Token, msg: &str) -> color_eyre::Report {
-        let mut buf = format!("[line {}] Error", token.line());
+        let mut buf = format!("[line {}] error", token.line());
 
         match token.typ() {
             TokenType::EOF => buf.push_str(" at end"),
@@ -228,6 +228,7 @@ mod tests {
     use super::{Parser, Precedence};
     use crate::chunk::{Chunk, OpCode};
     use crate::scanner::token::{Token, TokenType};
+    use crate::value::Value;
 
     #[test]
     fn parse_empty_source_succeeds() {
@@ -249,7 +250,7 @@ mod tests {
             chunk.code(),
             &[OpCode::OP_CONSTANT as u8, 0, OpCode::OP_RETURN as u8]
         );
-        assert_eq!(chunk.values(), &[42.0]);
+        assert_eq!(chunk.values(), &[Value::from(42.0)]);
     }
 
     #[test]
@@ -267,7 +268,7 @@ mod tests {
                 OpCode::OP_RETURN as u8,
             ]
         );
-        assert_eq!(chunk.values(), &[42.0]);
+        assert_eq!(chunk.values(), &[Value::from(42.0)]);
     }
 
     #[rstest]
@@ -292,7 +293,7 @@ mod tests {
                 OpCode::OP_RETURN as u8,
             ]
         );
-        assert_eq!(chunk.values(), &[8.0, 2.0]);
+        assert_eq!(chunk.values(), &[8.0, 2.0].map(Value::from));
     }
 
     #[rstest]
@@ -319,7 +320,7 @@ mod tests {
                 OpCode::OP_RETURN as u8,
             ]
         );
-        assert_eq!(chunk.values(), &[8.0, 2.0]);
+        assert_eq!(chunk.values(), &[8.0, 2.0].map(Value::from));
     }
 
     #[rstest]
@@ -350,7 +351,7 @@ mod tests {
                 OpCode::OP_RETURN as u8,
             ]
         );
-        assert_eq!(chunk.values(), &[1.0, 2.0, 3.0]);
+        assert_eq!(chunk.values(), &[1.0, 2.0, 3.0].map(Value::from));
     }
 
     #[rstest]
@@ -385,7 +386,7 @@ mod tests {
                 OpCode::OP_RETURN as u8,
             ]
         );
-        assert_eq!(chunk.values(), &[8.0, 4.0, 2.0]);
+        assert_eq!(chunk.values(), &[8.0, 4.0, 2.0].map(Value::from));
     }
 
     #[rstest]
@@ -421,6 +422,8 @@ mod tests {
 
         assert!(result.is_ok());
         assert_eq!(chunk.code(), expected_code);
+        let expected_values: Vec<Value> =
+            expected_values.iter().copied().map(Value::from).collect();
         assert_eq!(chunk.values(), expected_values);
     }
 

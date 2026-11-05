@@ -67,7 +67,7 @@ impl<'chunk> Iterator for ChunkIterator<'chunk> {
 
         let byte = *code.get(offset)?;
         let Ok(opcode) = byte.try_into() else {
-            eprintln!("Unknown opcode {byte}");
+            eprintln!("unknown opcode {byte}");
             self.offset = offset + 1;
             return self.next();
         };
@@ -109,7 +109,7 @@ mod tests {
     #[test]
     fn iterator_decodes_constant_instruction() {
         let mut chunk = Chunk::new();
-        chunk.write_constant(1.5, 0);
+        chunk.write_constant(1.5.into(), 0);
         let items: Vec<(usize, OpCode)> = chunk.iter().collect();
 
         assert_eq!(items.len(), 1);
@@ -121,8 +121,8 @@ mod tests {
     #[test]
     fn iterator_decodes_constant_long_instruction() {
         let mut chunk = Chunk::new();
-        chunk.constants.resize(256, 0.0);
-        chunk.write_constant(1.5, 0);
+        chunk.constants.resize(256, 0.0.into());
+        chunk.write_constant(1.5.into(), 0);
         let items: Vec<(usize, OpCode)> = chunk.iter().collect();
 
         assert_eq!(items.len(), 1);
