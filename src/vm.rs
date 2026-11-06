@@ -85,6 +85,15 @@ impl<'chunk> VM<'chunk> {
             }
 
             match opcode {
+                OpCode::OP_NIL => {
+                    self.stack.push(Value::Nil).unwrap();
+                }
+                OpCode::OP_TRUE => {
+                    self.stack.push(true.into()).unwrap();
+                }
+                OpCode::OP_FALSE => {
+                    self.stack.push(false.into()).unwrap();
+                }
                 OpCode::OP_CONSTANT => {
                     let constant = self.read_constant();
                     self.stack.push(constant).unwrap();
@@ -197,6 +206,21 @@ mod tests {
             self.write_constant(Value::Nil, 1);
             self.write_opcode(OpCode::OP_RETURN, 1);
         }
+    }
+
+    #[rstest]
+    #[case::nil(OpCode::OP_NIL, Value::Nil)]
+    #[case::true_literal(OpCode::OP_TRUE, true.into())]
+    #[case::false_literal(OpCode::OP_FALSE, false.into())]
+    fn op_literal_pushes_value(#[case] opcode: OpCode, #[case] expected: Value) {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(opcode, 1);
+        chunk.finish();
+
+        let mut vm = VM::new(&chunk);
+        vm.run().unwrap();
+
+        assert_eq!(vm.stack.as_slice(), &[expected]);
     }
 
     #[rstest]

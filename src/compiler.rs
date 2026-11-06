@@ -55,6 +55,9 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
         match token.typ() {
             TokenType::EOF => return Ok(()),
             TokenType::NUMBER => self.number(),
+            TokenType::NIL => self.emit_opcode(OpCode::OP_NIL),
+            TokenType::TRUE => self.emit_opcode(OpCode::OP_TRUE),
+            TokenType::FALSE => self.emit_opcode(OpCode::OP_FALSE),
             TokenType::LEFT_PAREN => self.grouping()?,
             _ => {
                 if let Some((opcode, prec)) = token.prefix_rule() {

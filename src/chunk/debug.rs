@@ -34,7 +34,10 @@ impl Chunk {
                 let value = self.constants[index];
                 println!("{opcode:<18} {index:>4} {value}");
             }
-            OpCode::OP_ADD
+            OpCode::OP_NIL
+            | OpCode::OP_TRUE
+            | OpCode::OP_FALSE
+            | OpCode::OP_ADD
             | OpCode::OP_SUBTRACT
             | OpCode::OP_MULTIPLY
             | OpCode::OP_DIVIDE
@@ -81,7 +84,10 @@ impl<'chunk> Iterator for ChunkIterator<'chunk> {
                 self.offset = offset + 4;
                 Some((offset, opcode))
             }
-            OpCode::OP_ADD
+            OpCode::OP_NIL
+            | OpCode::OP_TRUE
+            | OpCode::OP_FALSE
+            | OpCode::OP_ADD
             | OpCode::OP_SUBTRACT
             | OpCode::OP_MULTIPLY
             | OpCode::OP_DIVIDE
@@ -141,6 +147,19 @@ mod tests {
         let (offset, opcode) = items[0];
         assert_eq!(offset, 0);
         assert_eq!(opcode, OpCode::OP_RETURN);
+    }
+
+    #[rstest::rstest]
+    #[case(OpCode::OP_NIL)]
+    #[case(OpCode::OP_TRUE)]
+    #[case(OpCode::OP_FALSE)]
+    fn iterator_decodes_literal_opcode(#[case] opcode: OpCode) {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(opcode, 1);
+
+        let items: Vec<_> = chunk.iter().collect();
+
+        assert_eq!(items, [(0, opcode)]);
     }
 
     #[test]

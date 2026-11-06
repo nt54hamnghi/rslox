@@ -10,10 +10,13 @@ pub mod debug;
 #[repr(u8)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum OpCode {
-    // Load a constant using a 8-bit index.
+    /// Load a constant using a 8-bit index.
     OP_CONSTANT,
-    // Load a constant using a 24-bit index.
+    /// Load a constant using a 24-bit index.
     OP_CONSTANT_24,
+    OP_NIL,
+    OP_TRUE,
+    OP_FALSE,
     OP_ADD,
     OP_SUBTRACT,
     OP_MULTIPLY,
@@ -27,6 +30,9 @@ impl Display for OpCode {
         let s = match self {
             OpCode::OP_CONSTANT => "OP_CONSTANT",
             OpCode::OP_CONSTANT_24 => "OP_CONSTANT_24",
+            OpCode::OP_NIL => "OP_NIL",
+            OpCode::OP_TRUE => "OP_TRUE",
+            OpCode::OP_FALSE => "OP_FALSE",
             OpCode::OP_ADD => "OP_ADD",
             OpCode::OP_SUBTRACT => "OP_SUBTRACT",
             OpCode::OP_MULTIPLY => "OP_MULTIPLY",
@@ -45,12 +51,15 @@ impl TryFrom<u8> for OpCode {
         match value {
             0 => Ok(Self::OP_CONSTANT),
             1 => Ok(Self::OP_CONSTANT_24),
-            2 => Ok(Self::OP_ADD),
-            3 => Ok(Self::OP_SUBTRACT),
-            4 => Ok(Self::OP_MULTIPLY),
-            5 => Ok(Self::OP_DIVIDE),
-            6 => Ok(Self::OP_NEGATE),
-            7 => Ok(Self::OP_RETURN),
+            2 => Ok(Self::OP_NIL),
+            3 => Ok(Self::OP_TRUE),
+            4 => Ok(Self::OP_FALSE),
+            5 => Ok(Self::OP_ADD),
+            6 => Ok(Self::OP_SUBTRACT),
+            7 => Ok(Self::OP_MULTIPLY),
+            8 => Ok(Self::OP_DIVIDE),
+            9 => Ok(Self::OP_NEGATE),
+            10 => Ok(Self::OP_RETURN),
             _ => bail!("unknown opcode"),
         }
     }
@@ -202,12 +211,15 @@ mod tests {
     #[rstest]
     #[case(OpCode::OP_CONSTANT, 0, "OP_CONSTANT")]
     #[case(OpCode::OP_CONSTANT_24, 1, "OP_CONSTANT_24")]
-    #[case(OpCode::OP_ADD, 2, "OP_ADD")]
-    #[case(OpCode::OP_SUBTRACT, 3, "OP_SUBTRACT")]
-    #[case(OpCode::OP_MULTIPLY, 4, "OP_MULTIPLY")]
-    #[case(OpCode::OP_DIVIDE, 5, "OP_DIVIDE")]
-    #[case(OpCode::OP_NEGATE, 6, "OP_NEGATE")]
-    #[case(OpCode::OP_RETURN, 7, "OP_RETURN")]
+    #[case(OpCode::OP_NIL, 2, "OP_NIL")]
+    #[case(OpCode::OP_TRUE, 3, "OP_TRUE")]
+    #[case(OpCode::OP_FALSE, 4, "OP_FALSE")]
+    #[case(OpCode::OP_ADD, 5, "OP_ADD")]
+    #[case(OpCode::OP_SUBTRACT, 6, "OP_SUBTRACT")]
+    #[case(OpCode::OP_MULTIPLY, 7, "OP_MULTIPLY")]
+    #[case(OpCode::OP_DIVIDE, 8, "OP_DIVIDE")]
+    #[case(OpCode::OP_NEGATE, 9, "OP_NEGATE")]
+    #[case(OpCode::OP_RETURN, 10, "OP_RETURN")]
     fn opcode_has_the_expected_byte_and_display_name(
         #[case] opcode: OpCode,
         #[case] byte: u8,
@@ -220,17 +232,21 @@ mod tests {
     #[rstest]
     #[case(0, OpCode::OP_CONSTANT)]
     #[case(1, OpCode::OP_CONSTANT_24)]
-    #[case(2, OpCode::OP_ADD)]
-    #[case(3, OpCode::OP_SUBTRACT)]
-    #[case(4, OpCode::OP_MULTIPLY)]
-    #[case(5, OpCode::OP_DIVIDE)]
-    #[case(6, OpCode::OP_NEGATE)]
-    #[case(7, OpCode::OP_RETURN)]
+    #[case(2, OpCode::OP_NIL)]
+    #[case(3, OpCode::OP_TRUE)]
+    #[case(4, OpCode::OP_FALSE)]
+    #[case(5, OpCode::OP_ADD)]
+    #[case(6, OpCode::OP_SUBTRACT)]
+    #[case(7, OpCode::OP_MULTIPLY)]
+    #[case(8, OpCode::OP_DIVIDE)]
+    #[case(9, OpCode::OP_NEGATE)]
+    #[case(10, OpCode::OP_RETURN)]
     fn opcode_can_be_converted_from_its_byte(#[case] byte: u8, #[case] expected: OpCode) {
         assert_eq!(OpCode::try_from(byte).unwrap(), expected);
     }
 
     #[rstest]
+    #[case(11)]
     #[case(u8::MAX)]
     fn invalid_opcode_bytes_are_rejected(#[case] byte: u8) {
         assert!(OpCode::try_from(byte).is_err());
