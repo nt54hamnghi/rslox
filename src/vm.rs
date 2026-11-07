@@ -105,6 +105,13 @@ impl<'chunk> VM<'chunk> {
                 let constant = self.read_constant_24();
                 self.stack.push(constant)?;
             }
+            OpCode::OP_EQUAL => {
+                let b = self.stack.pop().unwrap();
+                let a = self.stack.pop().unwrap();
+                self.stack.push((a == b).into()).unwrap();
+            }
+            OpCode::OP_GREATER => binary_op!(>),
+            OpCode::OP_LESS => binary_op!(<),
             OpCode::OP_ADD => binary_op!(+),
             OpCode::OP_SUBTRACT => binary_op!(-),
             OpCode::OP_MULTIPLY => binary_op!(*),
@@ -259,6 +266,53 @@ mod tests {
     }
 
     #[rstest]
+    #[case::nil(Value::Nil, Value::Nil, true)]
+    #[case::true_boolean(true.into(), true.into(), true)]
+    #[case::false_boolean(false.into(), false.into(), true)]
+    #[case::different_booleans(true.into(), false.into(), false)]
+    #[case::equal_numbers(2.0.into(), 2.0.into(), true)]
+    #[case::different_numbers(2.0.into(), 8.0.into(), false)]
+    #[case::signed_zero(0.0.into(), (-0.0).into(), true)]
+    #[case::nil_and_false(Value::Nil, false.into(), false)]
+    #[case::nil_and_number(Value::Nil, 0.0.into(), false)]
+    #[case::boolean_and_number(true.into(), 1.0.into(), false)]
+    fn op_equal_pushes_boolean(#[case] left: Value, #[case] right: Value, #[case] expected: bool) {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(OpCode::OP_EQUAL, 1);
+
+        let mut vm = VM::new(&chunk);
+        vm.stack.push(left).unwrap();
+        vm.stack.push(right).unwrap();
+        vm.run().unwrap();
+
+        assert_eq!(vm.stack.as_slice(), &[expected.into()]);
+    }
+
+    #[rstest]
+    #[case::greater_true(OpCode::OP_GREATER, 8.0, 2.0, true)]
+    #[case::greater_false(OpCode::OP_GREATER, 2.0, 8.0, false)]
+    #[case::greater_equal(OpCode::OP_GREATER, 2.0, 2.0, false)]
+    #[case::less_true(OpCode::OP_LESS, 2.0, 8.0, true)]
+    #[case::less_false(OpCode::OP_LESS, 8.0, 2.0, false)]
+    #[case::less_equal(OpCode::OP_LESS, 2.0, 2.0, false)]
+    fn op_comparison_pushes_boolean(
+        #[case] opcode: OpCode,
+        #[case] left: f64,
+        #[case] right: f64,
+        #[case] expected: bool,
+    ) {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(opcode, 1);
+
+        let mut vm = VM::new(&chunk);
+        vm.stack.push(left.into()).unwrap();
+        vm.stack.push(right.into()).unwrap();
+        vm.run().unwrap();
+
+        assert_eq!(vm.stack.as_slice(), &[expected.into()]);
+    }
+
+    #[rstest]
     #[case::nil(Value::Nil, true)]
     #[case::false_boolean(false.into(), true)]
     #[case::true_boolean(true.into(), false)]
@@ -323,6 +377,8 @@ mod tests {
     #[case(true.into(), false.into())]
     fn op_binary_rejects_non_numbers(
         #[values(
+            OpCode::OP_GREATER,
+            OpCode::OP_LESS,
             OpCode::OP_ADD,
             OpCode::OP_SUBTRACT,
             OpCode::OP_MULTIPLY,

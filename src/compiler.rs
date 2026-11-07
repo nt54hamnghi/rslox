@@ -64,10 +64,10 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
             TokenType::FALSE => self.emit_opcode(OpCode::OP_FALSE),
             TokenType::LEFT_PAREN => self.grouping()?,
             _ => {
-                if let Some((opcode, prec)) = token.prefix_rule() {
-                    let rbp = prec as u8;
+                if let Some(rule) = token.prefix_rule() {
+                    let rbp = rule.prec as u8;
                     self.advance_expr(rbp)?;
-                    self.emit_opcode(opcode);
+                    self.emit_opcode(rule.opcode.0);
                 }
             }
         };
@@ -77,9 +77,12 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
                 break;
             };
 
-            if let Some((opcode, prec)) = token.infix_rule() {
+            if let Some(Rule { opcode, prec }) = token.infix_rule() {
                 let (lbp, rbp) = match prec {
-                    Precedence::TERM | Precedence::FACTOR => (prec as u8, prec as u8 + 1),
+                    Precedence::EQUALITY
+                    | Precedence::COMPARISON
+                    | Precedence::TERM
+                    | Precedence::FACTOR => (prec as u8, prec as u8 + 1),
                     _ => unreachable!(),
                 };
 
@@ -90,7 +93,14 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
                 // consumed the operator token
                 self.scanner.next().unwrap();
                 self.advance_expr(rbp)?;
-                self.emit_opcode(opcode);
+
+                match opcode {
+                    (first, None) => self.emit_opcode(first),
+                    (first, Some(second)) => {
+                        self.emit_opcode(first);
+                        self.emit_opcode(second);
+                    }
+                };
 
                 continue;
             }
@@ -134,12 +144,6 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
         self.emit_byte(opcode as u8);
     }
 
-    fn emit_bytes(&mut self, bytes: impl IntoIterator<Item = u8>) {
-        for b in bytes {
-            self.emit_byte(b);
-        }
-    }
-
     fn emit_constant(&mut self, value: Value) {
         let line = self.current.line();
         debug_assert_ne!(line, 0);
@@ -161,27 +165,76 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
 }
 
 impl Token {
-    fn prefix_rule(&self) -> Option<(OpCode, Precedence)> {
+    fn prefix_rule(&self) -> Option<Rule> {
         match self.typ() {
-            TokenType::MINUS => Some((OpCode::OP_NEGATE, Precedence::UNARY)),
-            TokenType::BANG => Some((OpCode::OP_NOT, Precedence::UNARY)),
+            TokenType::MINUS => Some(Rule {
+                opcode: (OpCode::OP_NEGATE, None),
+                prec: Precedence::UNARY,
+            }),
+            TokenType::BANG => Some(Rule {
+                opcode: (OpCode::OP_NOT, None),
+                prec: Precedence::UNARY,
+            }),
             _ => None,
         }
     }
 
-    fn infix_rule(&self) -> Option<(OpCode, Precedence)> {
+    fn infix_rule(&self) -> Option<Rule> {
         match self.typ() {
-            TokenType::PLUS => Some((OpCode::OP_ADD, Precedence::TERM)),
-            TokenType::MINUS => Some((OpCode::OP_SUBTRACT, Precedence::TERM)),
-            TokenType::SLASH => Some((OpCode::OP_DIVIDE, Precedence::FACTOR)),
-            TokenType::STAR => Some((OpCode::OP_MULTIPLY, Precedence::FACTOR)),
+            TokenType::EQUAL_EQUAL => Some(Rule {
+                opcode: (OpCode::OP_EQUAL, None),
+                prec: Precedence::EQUALITY,
+            }),
+            TokenType::BANG_EQUAL => Some(Rule {
+                opcode: (OpCode::OP_EQUAL, Some(OpCode::OP_NOT)),
+                prec: Precedence::EQUALITY,
+            }),
+            TokenType::GREATER => Some(Rule {
+                opcode: (OpCode::OP_GREATER, None),
+                prec: Precedence::COMPARISON,
+            }),
+            TokenType::GREATER_EQUAL => Some(Rule {
+                opcode: (OpCode::OP_LESS, Some(OpCode::OP_NOT)),
+                prec: Precedence::COMPARISON,
+            }),
+            TokenType::LESS => Some(Rule {
+                opcode: (OpCode::OP_LESS, None),
+                prec: Precedence::COMPARISON,
+            }),
+            TokenType::LESS_EQUAL => Some(Rule {
+                opcode: (OpCode::OP_GREATER, Some(OpCode::OP_NOT)),
+                prec: Precedence::COMPARISON,
+            }),
+            TokenType::PLUS => Some(Rule {
+                opcode: (OpCode::OP_ADD, None),
+                prec: Precedence::TERM,
+            }),
+            TokenType::MINUS => Some(Rule {
+                opcode: (OpCode::OP_SUBTRACT, None),
+                prec: Precedence::TERM,
+            }),
+            TokenType::SLASH => Some(Rule {
+                opcode: (OpCode::OP_DIVIDE, None),
+                prec: Precedence::FACTOR,
+            }),
+            TokenType::STAR => Some(Rule {
+                opcode: (OpCode::OP_MULTIPLY, None),
+                prec: Precedence::FACTOR,
+            }),
             _ => None,
         }
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Rule {
+    opcode: (OpCode, Option<OpCode>),
+    prec: Precedence,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
+#[allow(unused)]
 enum Precedence {
     NONE = 1,
     ASSIGNMENT = 3,
@@ -231,7 +284,7 @@ impl std::iter::FusedIterator for Scanner<'_> {}
 mod tests {
     use rstest::rstest;
 
-    use super::{Parser, Precedence};
+    use super::*;
     use crate::chunk::{Chunk, OpCode};
     use crate::scanner::token::{Token, TokenType};
     use crate::value::Value;
@@ -278,6 +331,25 @@ mod tests {
     }
 
     #[rstest]
+    #[case::nil("!nil", &[OpCode::OP_NIL, OpCode::OP_NOT])]
+    #[case::true_boolean("!true", &[OpCode::OP_TRUE, OpCode::OP_NOT])]
+    #[case::false_boolean("!false", &[OpCode::OP_FALSE, OpCode::OP_NOT])]
+    #[case::grouped("!(true)", &[OpCode::OP_TRUE, OpCode::OP_NOT])]
+    #[case::nested("!!true", &[OpCode::OP_TRUE, OpCode::OP_NOT, OpCode::OP_NOT])]
+    #[case::mixed("!true == false", &[OpCode::OP_TRUE, OpCode::OP_NOT, OpCode::OP_FALSE, OpCode::OP_EQUAL])]
+    #[case::grouped_mixed("!(true == false)", &[OpCode::OP_TRUE, OpCode::OP_FALSE, OpCode::OP_EQUAL, OpCode::OP_NOT])]
+    fn parse_logical_not_emits_opcodes(#[case] source: &str, #[case] opcodes: &[OpCode]) {
+        let mut chunk = Chunk::new();
+        Parser::parse(source, &mut chunk).unwrap();
+
+        let mut expected: Vec<u8> = opcodes.iter().map(|opcode| *opcode as u8).collect();
+        expected.push(OpCode::OP_RETURN as u8);
+
+        assert_eq!(chunk.code(), expected);
+        assert!(chunk.values().is_empty());
+    }
+
+    #[rstest]
     #[case::before_add("-8 + 2", OpCode::OP_ADD)]
     #[case::before_sub("-8 - 2", OpCode::OP_SUBTRACT)]
     #[case::before_mul("-8 * 2", OpCode::OP_MULTIPLY)]
@@ -303,29 +375,28 @@ mod tests {
     }
 
     #[rstest]
-    #[case::add("8 + 2", OpCode::OP_ADD)]
-    #[case::sub("8 - 2", OpCode::OP_SUBTRACT)]
-    #[case::mul("8 * 2", OpCode::OP_MULTIPLY)]
-    #[case::div("8 / 2", OpCode::OP_DIVIDE)]
+    #[case::add("8 + 2", &[OpCode::OP_ADD])]
+    #[case::sub("8 - 2", &[OpCode::OP_SUBTRACT])]
+    #[case::mul("8 * 2", &[OpCode::OP_MULTIPLY])]
+    #[case::div("8 / 2", &[OpCode::OP_DIVIDE])]
+    #[case::equal("8 == 2", &[OpCode::OP_EQUAL])]
+    #[case::not_equal("8 != 2", &[OpCode::OP_EQUAL, OpCode::OP_NOT])]
+    #[case::greater("8 > 2", &[OpCode::OP_GREATER])]
+    #[case::greater_equal("8 >= 2", &[OpCode::OP_LESS, OpCode::OP_NOT])]
+    #[case::less("8 < 2", &[OpCode::OP_LESS])]
+    #[case::less_equal("8 <= 2", &[OpCode::OP_GREATER, OpCode::OP_NOT])]
     fn parse_binary_operation_emits_constants_and_operator(
         #[case] source: &str,
-        #[case] opcode: OpCode,
+        #[case] opcodes: &[OpCode],
     ) {
         let mut chunk = Chunk::new();
         let result = Parser::parse(source, &mut chunk);
 
         assert!(result.is_ok());
-        assert_eq!(
-            chunk.code(),
-            &[
-                OpCode::OP_CONSTANT as u8,
-                0,
-                OpCode::OP_CONSTANT as u8,
-                1,
-                opcode as u8,
-                OpCode::OP_RETURN as u8,
-            ]
-        );
+        let mut expected = vec![OpCode::OP_CONSTANT as u8, 0, OpCode::OP_CONSTANT as u8, 1];
+        expected.extend(opcodes.iter().map(|opcode| *opcode as u8));
+        expected.push(OpCode::OP_RETURN as u8);
+        assert_eq!(chunk.code(), expected);
         assert_eq!(chunk.values(), &[8.0, 2.0].map(Value::from));
     }
 
@@ -334,6 +405,10 @@ mod tests {
     #[case::div_before_add("1 + 2 / 3", OpCode::OP_DIVIDE, OpCode::OP_ADD)]
     #[case::mul_before_sub("1 - 2 * 3", OpCode::OP_MULTIPLY, OpCode::OP_SUBTRACT)]
     #[case::div_before_sub("1 - 2 / 3", OpCode::OP_DIVIDE, OpCode::OP_SUBTRACT)]
+    #[case::add_before_less("1 < 2 + 3", OpCode::OP_ADD, OpCode::OP_LESS)]
+    #[case::sub_before_greater("1 > 2 - 3", OpCode::OP_SUBTRACT, OpCode::OP_GREATER)]
+    #[case::less_before_equal("1 == 2 < 3", OpCode::OP_LESS, OpCode::OP_EQUAL)]
+    #[case::greater_before_equal("1 == 2 > 3", OpCode::OP_GREATER, OpCode::OP_EQUAL)]
     fn parse_operator_precedence(
         #[case] source: &str,
         #[case] higher_prec: OpCode,
@@ -369,6 +444,12 @@ mod tests {
     #[case::sub_then_add("8 - 4 + 2", OpCode::OP_SUBTRACT, OpCode::OP_ADD)]
     #[case::mul_then_div("8 * 4 / 2", OpCode::OP_MULTIPLY, OpCode::OP_DIVIDE)]
     #[case::div_then_mul("8 / 4 * 2", OpCode::OP_DIVIDE, OpCode::OP_MULTIPLY)]
+    #[case::equal("8 == 4 == 2", OpCode::OP_EQUAL, OpCode::OP_EQUAL)]
+    #[case::less("8 < 4 < 2", OpCode::OP_LESS, OpCode::OP_LESS)]
+    #[case::greater("8 > 4 > 2", OpCode::OP_GREATER, OpCode::OP_GREATER)]
+    #[case::less_then_greater("8 < 4 > 2", OpCode::OP_LESS, OpCode::OP_GREATER)]
+    #[case::comparison_before_equal("8 < 4 == 2", OpCode::OP_LESS, OpCode::OP_EQUAL)]
+    #[case::add_before_comparison("8 + 4 < 2", OpCode::OP_ADD, OpCode::OP_LESS)]
     fn parse_operator_associativity(
         #[case] source: &str,
         #[case] first_op: OpCode,
@@ -435,6 +516,7 @@ mod tests {
 
     #[rstest]
     #[case::minus(TokenType::MINUS, OpCode::OP_NEGATE, Precedence::UNARY)]
+    #[case::bang(TokenType::BANG, OpCode::OP_NOT, Precedence::UNARY)]
     fn token_prefix_rule_returns_opcode_and_precedence(
         #[case] typ: TokenType,
         #[case] opcode: OpCode,
@@ -442,21 +524,39 @@ mod tests {
     ) {
         let token = Token::new(0, 1, typ, 1);
 
-        assert_eq!(token.prefix_rule(), Some((opcode, precedence)));
+        assert_eq!(
+            token.prefix_rule(),
+            Some(Rule {
+                opcode: (opcode, None),
+                prec: precedence,
+            })
+        );
     }
 
     #[rstest]
-    #[case::plus(TokenType::PLUS, OpCode::OP_ADD, Precedence::TERM)]
-    #[case::minus(TokenType::MINUS, OpCode::OP_SUBTRACT, Precedence::TERM)]
-    #[case::slash(TokenType::SLASH, OpCode::OP_DIVIDE, Precedence::FACTOR)]
-    #[case::star(TokenType::STAR, OpCode::OP_MULTIPLY, Precedence::FACTOR)]
+    #[case::equal(TokenType::EQUAL_EQUAL, (OpCode::OP_EQUAL, None), Precedence::EQUALITY)]
+    #[case::not_equal(TokenType::BANG_EQUAL, (OpCode::OP_EQUAL, Some(OpCode::OP_NOT)), Precedence::EQUALITY)]
+    #[case::greater(TokenType::GREATER, (OpCode::OP_GREATER, None), Precedence::COMPARISON)]
+    #[case::greater_equal(TokenType::GREATER_EQUAL, (OpCode::OP_LESS, Some(OpCode::OP_NOT)), Precedence::COMPARISON)]
+    #[case::less(TokenType::LESS, (OpCode::OP_LESS, None), Precedence::COMPARISON)]
+    #[case::less_equal(TokenType::LESS_EQUAL, (OpCode::OP_GREATER, Some(OpCode::OP_NOT)), Precedence::COMPARISON)]
+    #[case::plus(TokenType::PLUS, (OpCode::OP_ADD, None), Precedence::TERM)]
+    #[case::minus(TokenType::MINUS, (OpCode::OP_SUBTRACT, None), Precedence::TERM)]
+    #[case::slash(TokenType::SLASH, (OpCode::OP_DIVIDE, None), Precedence::FACTOR)]
+    #[case::star(TokenType::STAR, (OpCode::OP_MULTIPLY, None), Precedence::FACTOR)]
     fn token_infix_rule_returns_opcode_and_precedence(
         #[case] typ: TokenType,
-        #[case] opcode: OpCode,
+        #[case] opcode: (OpCode, Option<OpCode>),
         #[case] precedence: Precedence,
     ) {
         let token = Token::new(0, 1, typ, 1);
 
-        assert_eq!(token.infix_rule(), Some((opcode, precedence)));
+        assert_eq!(
+            token.infix_rule(),
+            Some(Rule {
+                opcode,
+                prec: precedence,
+            })
+        );
     }
 }

@@ -17,6 +17,9 @@ pub enum OpCode {
     OP_NIL,
     OP_TRUE,
     OP_FALSE,
+    OP_EQUAL,
+    OP_GREATER,
+    OP_LESS,
     OP_ADD,
     OP_SUBTRACT,
     OP_MULTIPLY,
@@ -34,6 +37,9 @@ impl Display for OpCode {
             OpCode::OP_NIL => "OP_NIL",
             OpCode::OP_TRUE => "OP_TRUE",
             OpCode::OP_FALSE => "OP_FALSE",
+            OpCode::OP_EQUAL => "OP_EQUAL",
+            OpCode::OP_GREATER => "OP_GREATER",
+            OpCode::OP_LESS => "OP_LESS",
             OpCode::OP_ADD => "OP_ADD",
             OpCode::OP_SUBTRACT => "OP_SUBTRACT",
             OpCode::OP_MULTIPLY => "OP_MULTIPLY",
@@ -56,13 +62,16 @@ impl TryFrom<u8> for OpCode {
             2 => Ok(Self::OP_NIL),
             3 => Ok(Self::OP_TRUE),
             4 => Ok(Self::OP_FALSE),
-            5 => Ok(Self::OP_ADD),
-            6 => Ok(Self::OP_SUBTRACT),
-            7 => Ok(Self::OP_MULTIPLY),
-            8 => Ok(Self::OP_DIVIDE),
-            9 => Ok(Self::OP_NOT),
-            10 => Ok(Self::OP_NEGATE),
-            11 => Ok(Self::OP_RETURN),
+            5 => Ok(Self::OP_EQUAL),
+            6 => Ok(Self::OP_GREATER),
+            7 => Ok(Self::OP_LESS),
+            8 => Ok(Self::OP_ADD),
+            9 => Ok(Self::OP_SUBTRACT),
+            10 => Ok(Self::OP_MULTIPLY),
+            11 => Ok(Self::OP_DIVIDE),
+            12 => Ok(Self::OP_NOT),
+            13 => Ok(Self::OP_NEGATE),
+            14 => Ok(Self::OP_RETURN),
             _ => bail!("unknown opcode"),
         }
     }
@@ -217,13 +226,16 @@ mod tests {
     #[case(OpCode::OP_NIL, 2, "OP_NIL")]
     #[case(OpCode::OP_TRUE, 3, "OP_TRUE")]
     #[case(OpCode::OP_FALSE, 4, "OP_FALSE")]
-    #[case(OpCode::OP_ADD, 5, "OP_ADD")]
-    #[case(OpCode::OP_SUBTRACT, 6, "OP_SUBTRACT")]
-    #[case(OpCode::OP_MULTIPLY, 7, "OP_MULTIPLY")]
-    #[case(OpCode::OP_DIVIDE, 8, "OP_DIVIDE")]
-    #[case(OpCode::OP_NOT, 9, "OP_NOT")]
-    #[case(OpCode::OP_NEGATE, 10, "OP_NEGATE")]
-    #[case(OpCode::OP_RETURN, 11, "OP_RETURN")]
+    #[case(OpCode::OP_EQUAL, 5, "OP_EQUAL")]
+    #[case(OpCode::OP_GREATER, 6, "OP_GREATER")]
+    #[case(OpCode::OP_LESS, 7, "OP_LESS")]
+    #[case(OpCode::OP_ADD, 8, "OP_ADD")]
+    #[case(OpCode::OP_SUBTRACT, 9, "OP_SUBTRACT")]
+    #[case(OpCode::OP_MULTIPLY, 10, "OP_MULTIPLY")]
+    #[case(OpCode::OP_DIVIDE, 11, "OP_DIVIDE")]
+    #[case(OpCode::OP_NOT, 12, "OP_NOT")]
+    #[case(OpCode::OP_NEGATE, 13, "OP_NEGATE")]
+    #[case(OpCode::OP_RETURN, 14, "OP_RETURN")]
     fn opcode_has_the_expected_byte_and_display_name(
         #[case] opcode: OpCode,
         #[case] byte: u8,
@@ -239,19 +251,22 @@ mod tests {
     #[case(2, OpCode::OP_NIL)]
     #[case(3, OpCode::OP_TRUE)]
     #[case(4, OpCode::OP_FALSE)]
-    #[case(5, OpCode::OP_ADD)]
-    #[case(6, OpCode::OP_SUBTRACT)]
-    #[case(7, OpCode::OP_MULTIPLY)]
-    #[case(8, OpCode::OP_DIVIDE)]
-    #[case(9, OpCode::OP_NOT)]
-    #[case(10, OpCode::OP_NEGATE)]
-    #[case(11, OpCode::OP_RETURN)]
+    #[case(5, OpCode::OP_EQUAL)]
+    #[case(6, OpCode::OP_GREATER)]
+    #[case(7, OpCode::OP_LESS)]
+    #[case(8, OpCode::OP_ADD)]
+    #[case(9, OpCode::OP_SUBTRACT)]
+    #[case(10, OpCode::OP_MULTIPLY)]
+    #[case(11, OpCode::OP_DIVIDE)]
+    #[case(12, OpCode::OP_NOT)]
+    #[case(13, OpCode::OP_NEGATE)]
+    #[case(14, OpCode::OP_RETURN)]
     fn opcode_can_be_converted_from_its_byte(#[case] byte: u8, #[case] expected: OpCode) {
         assert_eq!(OpCode::try_from(byte).unwrap(), expected);
     }
 
     #[rstest]
-    #[case(12)]
+    #[case(15)]
     #[case(u8::MAX)]
     fn invalid_opcode_bytes_are_rejected(#[case] byte: u8) {
         assert!(OpCode::try_from(byte).is_err());

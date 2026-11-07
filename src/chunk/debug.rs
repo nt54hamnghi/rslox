@@ -37,6 +37,9 @@ impl Chunk {
             OpCode::OP_NIL
             | OpCode::OP_TRUE
             | OpCode::OP_FALSE
+            | OpCode::OP_EQUAL
+            | OpCode::OP_GREATER
+            | OpCode::OP_LESS
             | OpCode::OP_ADD
             | OpCode::OP_SUBTRACT
             | OpCode::OP_MULTIPLY
@@ -88,6 +91,9 @@ impl<'chunk> Iterator for ChunkIterator<'chunk> {
             OpCode::OP_NIL
             | OpCode::OP_TRUE
             | OpCode::OP_FALSE
+            | OpCode::OP_EQUAL
+            | OpCode::OP_GREATER
+            | OpCode::OP_LESS
             | OpCode::OP_ADD
             | OpCode::OP_SUBTRACT
             | OpCode::OP_MULTIPLY
@@ -155,6 +161,9 @@ mod tests {
     #[case(OpCode::OP_NIL)]
     #[case(OpCode::OP_TRUE)]
     #[case(OpCode::OP_FALSE)]
+    #[case(OpCode::OP_EQUAL)]
+    #[case(OpCode::OP_GREATER)]
+    #[case(OpCode::OP_LESS)]
     #[case(OpCode::OP_NOT)]
     fn iterator_decodes_simple_opcode(#[case] opcode: OpCode) {
         let mut chunk = Chunk::new();
