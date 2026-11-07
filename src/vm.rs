@@ -55,26 +55,8 @@ impl<'chunk> VM<'chunk> {
     }
 
     fn run(&mut self) -> Result<(), Error> {
-        macro_rules! binary_op {
-            ($op:tt) => {{
-                // A binary operation expects its two operands on the stack.
-                // If the stack contains fewer than two values, something went
-                // wrong during compilation: the compiler should have rejected
-                // the invalid expression before the VM started executing.
-                let b = self.stack.pop().unwrap();
-                let a = self.stack.pop().unwrap();
-                let (Value::Number(a), Value::Number(b)) = (a, b) else {
-                    let err = self.runtime_error("both operands must be numbers");
-                    return Err(err);
-                };
-                self.stack.push((a $op b).into()).unwrap();
-            }};
-        }
-
         loop {
             let byte = self.read_byte();
-            // failure to convert into an opcode indicates
-            // bugs in bytecode walking logic
             let opcode = OpCode::try_from(byte).expect("a valid opcode");
 
             #[cfg(feature = "trace")]
@@ -84,53 +66,67 @@ impl<'chunk> VM<'chunk> {
                 self.debug_stack();
             }
 
-            match opcode {
-                OpCode::OP_NIL => {
-                    self.stack.push(Value::Nil).unwrap();
-                }
-                OpCode::OP_TRUE => {
-                    self.stack.push(true.into()).unwrap();
-                }
-                OpCode::OP_FALSE => {
-                    self.stack.push(false.into()).unwrap();
-                }
-                OpCode::OP_CONSTANT => {
-                    let constant = self.read_constant();
-                    self.stack.push(constant).unwrap();
-                }
-                OpCode::OP_CONSTANT_24 => {
-                    let constant = self.read_constant_24();
-                    self.stack.push(constant).unwrap();
-                }
-                OpCode::OP_ADD => binary_op!(+),
-                OpCode::OP_SUBTRACT => binary_op!(-),
-                OpCode::OP_MULTIPLY => binary_op!(*),
-                OpCode::OP_DIVIDE => binary_op!(/),
-                OpCode::OP_NEGATE => {
-                    // OP_NEGATE expects a value on the stack.
-                    let Value::Number(n) = self.stack.pop().unwrap() else {
-                        let err = self.runtime_error("operand must be a number");
-                        return Err(err);
-                    };
-                    self.stack.push((-n).into()).unwrap();
-                }
-                OpCode::OP_RETURN => {
-                    println!("{}", self.stack.pop().unwrap());
-                    return Ok(());
-                }
+            self.dispatch(opcode).map_err(|e| {
+                self.stack.clear();
+                Error::Runtime(e)
+            })?;
+
+            if self.ip >= self.chunk.code().len() {
+                break Ok(());
             }
         }
     }
 
-    /// Creates a runtime error associated with the failed instruction.
-    ///
-    /// The VM stack is cleared before the error is returned so the VM
-    /// is left in a clean state.
-    fn runtime_error(&mut self, msg: &str) -> Error {
+    fn dispatch(&mut self, opcode: OpCode) -> color_eyre::Result<()> {
+        macro_rules! binary_op {
+            ($op:tt) => {{
+                // A binary operation expects its two operands on the stack.
+                // If the stack contains fewer than two values, something went
+                // wrong during compilation: the compiler should have rejected
+                // the invalid expression before the VM started executing.
+                let b = self.stack.pop().unwrap();
+                let a = self.stack.pop().unwrap();
+                let (Value::Number(a), Value::Number(b)) = (a, b) else {
+                    return Err(self.error("both operands must be numbers"));
+                };
+                self.stack.push((a $op b).into()).unwrap();
+            }};
+        }
+
+        match opcode {
+            OpCode::OP_NIL => self.stack.push(Value::Nil)?,
+            OpCode::OP_TRUE => self.stack.push(true.into())?,
+            OpCode::OP_FALSE => self.stack.push(false.into())?,
+            OpCode::OP_CONSTANT => {
+                let constant = self.read_constant();
+                self.stack.push(constant)?;
+            }
+            OpCode::OP_CONSTANT_24 => {
+                let constant = self.read_constant_24();
+                self.stack.push(constant)?;
+            }
+            OpCode::OP_ADD => binary_op!(+),
+            OpCode::OP_SUBTRACT => binary_op!(-),
+            OpCode::OP_MULTIPLY => binary_op!(*),
+            OpCode::OP_DIVIDE => binary_op!(/),
+            OpCode::OP_NEGATE => {
+                // OP_NEGATE expects a value on the stack.
+                let Value::Number(n) = self.stack.pop().unwrap() else {
+                    return Err(self.error("operand must be a number"));
+                };
+                self.stack.push((-n).into()).unwrap();
+            }
+            OpCode::OP_RETURN => {
+                println!("{}", self.stack.pop().unwrap());
+            }
+        };
+
+        Ok(())
+    }
+
+    fn error(&mut self, msg: &str) -> color_eyre::Report {
         let line = self.chunk.get_line(self.ip - 1);
-        let err = eyre!("[line {line}] error: {msg}");
-        self.stack.clear();
-        Error::Runtime(err)
+        eyre!("[line {line}] error: {msg}")
     }
 
     #[cfg(feature = "trace")]
@@ -198,16 +194,6 @@ mod tests {
         assert_eq!(vm.ip, 3);
     }
 
-    impl Chunk {
-        // OP_RETURN is the only branch that returns from VM::run,
-        // so append it along with a value for it to pop.
-        // Its implementation is temporary, so this helper may change.
-        fn finish(&mut self) {
-            self.write_constant(Value::Nil, 1);
-            self.write_opcode(OpCode::OP_RETURN, 1);
-        }
-    }
-
     #[rstest]
     #[case::nil(OpCode::OP_NIL, Value::Nil)]
     #[case::true_literal(OpCode::OP_TRUE, true.into())]
@@ -215,7 +201,6 @@ mod tests {
     fn op_literal_pushes_value(#[case] opcode: OpCode, #[case] expected: Value) {
         let mut chunk = Chunk::new();
         chunk.write_opcode(opcode, 1);
-        chunk.finish();
 
         let mut vm = VM::new(&chunk);
         vm.run().unwrap();
@@ -231,7 +216,6 @@ mod tests {
     fn op_constant_pushes_constant(#[case] value: Value) {
         let mut chunk = Chunk::new();
         chunk.write_constant(value, 1);
-        chunk.finish();
 
         let mut vm = VM::new(&chunk);
         vm.run().unwrap();
@@ -247,7 +231,6 @@ mod tests {
         }
 
         chunk.write_constant(true.into(), 1);
-        chunk.finish();
 
         let mut vm = VM::new(&chunk);
         vm.run().unwrap();
@@ -263,7 +246,6 @@ mod tests {
     fn op_binary_pushes_result(#[case] opcode: OpCode, #[case] expected: f64) {
         let mut chunk = Chunk::new();
         chunk.write_opcode(opcode, 1);
-        chunk.finish();
 
         let mut vm = VM::new(&chunk);
         vm.stack.push(8.0.into()).unwrap();
@@ -280,7 +262,6 @@ mod tests {
     fn op_negate_pushes_result(#[case] operand: f64, #[case] expected: f64) {
         let mut chunk = Chunk::new();
         chunk.write_opcode(OpCode::OP_NEGATE, 1);
-        chunk.finish();
 
         let mut vm = VM::new(&chunk);
         vm.stack.push(operand.into()).unwrap();
@@ -296,13 +277,12 @@ mod tests {
     fn op_negate_rejects_non_number(#[case] operand: Value) {
         let mut chunk = Chunk::new();
         chunk.write_opcode(OpCode::OP_NEGATE, 1);
-        chunk.finish();
 
         let mut vm = VM::new(&chunk);
         // keep a value below the operand to ensure that
         // the stack is actually cleared after an error,
         // rather than merely emptied when the operand is popped.
-        vm.stack.push(Value::Nil);
+        vm.stack.push(Value::Nil).unwrap();
         vm.stack.push(operand).unwrap();
 
         let res = vm.run();
@@ -333,14 +313,13 @@ mod tests {
     ) {
         let mut chunk = Chunk::new();
         chunk.write_opcode(opcode, 1);
-        chunk.finish();
 
         let mut vm = VM::new(&chunk);
         // keep a value below the operands to ensure that
         // the stack is actually cleared after an error,
         // rather than merely emptied when the operands
         // are popped.
-        vm.stack.push(Value::Nil);
+        vm.stack.push(Value::Nil).unwrap();
         vm.stack.push(left).unwrap();
         vm.stack.push(right).unwrap();
 

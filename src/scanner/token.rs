@@ -40,11 +40,6 @@ impl Token {
         self.line
     }
 
-    /// Returns whether this is an end-of-file token.
-    pub fn is_eof(&self) -> bool {
-        self.typ == TokenType::EOF
-    }
-
     /// Returns the token's lexeme within the source text.
     pub fn lexeme<'s>(&self, source: &'s str) -> &'s str {
         debug_assert!(!matches!(self.typ, TokenType::EOF));

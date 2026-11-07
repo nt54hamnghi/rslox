@@ -23,14 +23,6 @@ pub enum Error {
     UnexpectedCharacter { char: char, line: usize },
 }
 
-impl Error {
-    pub fn line(&self) -> usize {
-        match self {
-            Self::UnterminatedString { line } | Self::UnexpectedCharacter { line, .. } => *line,
-        }
-    }
-}
-
 impl Iterator for Scanner<'_> {
     type Item = Result<Token, Error>;
 
@@ -176,7 +168,7 @@ impl<'source> Scanner<'source> {
     }
 
     fn identifier(&mut self) -> Token {
-        let mut last = self.skip_chars_while(|c| c == '_' || c.is_ascii_alphanumeric());
+        let last = self.skip_chars_while(|c| c == '_' || c.is_ascii_alphanumeric());
         let offset = last.map(|i| i.0).unwrap_or(self.token_start);
         let typ = match &self.source[self.token_start..offset + 1] {
             "and" => TokenType::AND,
@@ -208,7 +200,7 @@ mod tests {
     use super::{Error, Scanner, Token, TokenType};
 
     fn assert_eof_then_none(scanner: &mut Scanner<'_>) {
-        assert!(scanner.next().unwrap().unwrap().is_eof());
+        assert!(scanner.next().unwrap().unwrap().typ() == TokenType::EOF);
         assert!(scanner.next().is_none());
     }
 
@@ -229,11 +221,9 @@ mod tests {
     #[test]
     fn scanner_next_returns_unexpected_character_error() {
         let mut scanner = Scanner::new("@");
-        let line = scanner.line;
-
         assert!(matches!(
             scanner.next(),
-            Some(Err(Error::UnexpectedCharacter { char: '@', line }))
+            Some(Err(Error::UnexpectedCharacter { char: '@', line: 1 }))
         ));
         assert_eof_then_none(&mut scanner);
     }
@@ -395,12 +385,11 @@ mod tests {
     #[case::multiline("\"hello\nworld")]
     fn scanner_next_returns_unterminated_string_error(#[case] source: &str) {
         let mut scanner = Scanner::new(source);
-        let line = scanner.line;
 
-        assert!(matches!(
-            scanner.next(),
-            Some(Err(Error::UnterminatedString { line }))
-        ));
+        let Some(Err(Error::UnterminatedString { line })) = scanner.next() else {
+            panic!()
+        };
+        assert_eq!(line, scanner.line);
         assert_eof_then_none(&mut scanner);
     }
 

@@ -13,8 +13,9 @@ struct Cli {
 }
 
 fn main() -> color_eyre::Result<()> {
-    let cli = Cli::parse();
+    color_eyre::install()?;
 
+    let cli = Cli::parse();
     match cli.path {
         Some(path) => run_file(path),
         None => repl(),
@@ -32,7 +33,9 @@ fn repl() -> color_eyre::Result<()> {
         if stdin.read_line(&mut buf)? == 0 {
             break;
         }
-        VM::interpret(buf.trim_end());
+        if let Err(err) = VM::interpret(buf.trim_end()) {
+            eprintln!("{err}")
+        }
         buf.clear();
     }
 
@@ -42,11 +45,13 @@ fn repl() -> color_eyre::Result<()> {
 fn run_file(path: impl AsRef<Path>) -> color_eyre::Result<()> {
     let source = fs::read_to_string(path)?;
     match VM::interpret(&source) {
-        Ok(()) => Ok(()),
-        Err(err) => match err {
-            // TODO: handle inner error
-            Error::Compile(_) => exit(65),
-            Error::Runtime(_) => exit(70),
-        },
+        Ok(_) => Ok(()),
+        Err(err) => {
+            eprintln!("{err}");
+            match err {
+                Error::Compile(_) => exit(65),
+                Error::Runtime(_) => exit(70),
+            }
+        }
     }
 }

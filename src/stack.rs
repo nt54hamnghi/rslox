@@ -79,6 +79,7 @@ impl<T, const N: usize> Stack<T, N> {
     /// A distance of `0` returns the top value, `1` returns the value directly
     /// below it, and so on. Returns `None` if `distance` is outside the stack's
     /// initialized values.
+    #[allow(unused)]
     pub fn peek(&self, distance: usize) -> Option<&T> {
         if distance >= self.len() {
             return None;

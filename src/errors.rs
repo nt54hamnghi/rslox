@@ -6,18 +6,8 @@ pub enum Error {
     Runtime(#[source] color_eyre::Report),
 }
 
-impl Error {
-    pub fn compile<E>(err: E) -> Self
-    where
-        E: Into<color_eyre::Report>,
-    {
-        Error::Compile(err.into())
-    }
-
-    pub fn runtime<E>(err: E) -> Self
-    where
-        E: Into<color_eyre::Report>,
-    {
-        Error::Runtime(err.into())
+impl From<crate::compiler::Error> for Error {
+    fn from(err: crate::compiler::Error) -> Self {
+        Self::Compile(color_eyre::Report::from(err))
     }
 }
