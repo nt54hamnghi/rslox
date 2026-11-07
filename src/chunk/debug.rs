@@ -41,6 +41,7 @@ impl Chunk {
             | OpCode::OP_SUBTRACT
             | OpCode::OP_MULTIPLY
             | OpCode::OP_DIVIDE
+            | OpCode::OP_NOT
             | OpCode::OP_NEGATE
             | OpCode::OP_RETURN => {
                 println!("{opcode}");
@@ -91,6 +92,7 @@ impl<'chunk> Iterator for ChunkIterator<'chunk> {
             | OpCode::OP_SUBTRACT
             | OpCode::OP_MULTIPLY
             | OpCode::OP_DIVIDE
+            | OpCode::OP_NOT
             | OpCode::OP_NEGATE
             | OpCode::OP_RETURN => {
                 self.offset = offset + 1;
@@ -153,7 +155,8 @@ mod tests {
     #[case(OpCode::OP_NIL)]
     #[case(OpCode::OP_TRUE)]
     #[case(OpCode::OP_FALSE)]
-    fn iterator_decodes_literal_opcode(#[case] opcode: OpCode) {
+    #[case(OpCode::OP_NOT)]
+    fn iterator_decodes_simple_opcode(#[case] opcode: OpCode) {
         let mut chunk = Chunk::new();
         chunk.write_opcode(opcode, 1);
 

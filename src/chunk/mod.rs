@@ -21,6 +21,7 @@ pub enum OpCode {
     OP_SUBTRACT,
     OP_MULTIPLY,
     OP_DIVIDE,
+    OP_NOT,
     OP_NEGATE,
     OP_RETURN,
 }
@@ -37,6 +38,7 @@ impl Display for OpCode {
             OpCode::OP_SUBTRACT => "OP_SUBTRACT",
             OpCode::OP_MULTIPLY => "OP_MULTIPLY",
             OpCode::OP_DIVIDE => "OP_DIVIDE",
+            OpCode::OP_NOT => "OP_NOT",
             OpCode::OP_NEGATE => "OP_NEGATE",
             OpCode::OP_RETURN => "OP_RETURN",
         };
@@ -58,8 +60,9 @@ impl TryFrom<u8> for OpCode {
             6 => Ok(Self::OP_SUBTRACT),
             7 => Ok(Self::OP_MULTIPLY),
             8 => Ok(Self::OP_DIVIDE),
-            9 => Ok(Self::OP_NEGATE),
-            10 => Ok(Self::OP_RETURN),
+            9 => Ok(Self::OP_NOT),
+            10 => Ok(Self::OP_NEGATE),
+            11 => Ok(Self::OP_RETURN),
             _ => bail!("unknown opcode"),
         }
     }
@@ -218,8 +221,9 @@ mod tests {
     #[case(OpCode::OP_SUBTRACT, 6, "OP_SUBTRACT")]
     #[case(OpCode::OP_MULTIPLY, 7, "OP_MULTIPLY")]
     #[case(OpCode::OP_DIVIDE, 8, "OP_DIVIDE")]
-    #[case(OpCode::OP_NEGATE, 9, "OP_NEGATE")]
-    #[case(OpCode::OP_RETURN, 10, "OP_RETURN")]
+    #[case(OpCode::OP_NOT, 9, "OP_NOT")]
+    #[case(OpCode::OP_NEGATE, 10, "OP_NEGATE")]
+    #[case(OpCode::OP_RETURN, 11, "OP_RETURN")]
     fn opcode_has_the_expected_byte_and_display_name(
         #[case] opcode: OpCode,
         #[case] byte: u8,
@@ -239,14 +243,15 @@ mod tests {
     #[case(6, OpCode::OP_SUBTRACT)]
     #[case(7, OpCode::OP_MULTIPLY)]
     #[case(8, OpCode::OP_DIVIDE)]
-    #[case(9, OpCode::OP_NEGATE)]
-    #[case(10, OpCode::OP_RETURN)]
+    #[case(9, OpCode::OP_NOT)]
+    #[case(10, OpCode::OP_NEGATE)]
+    #[case(11, OpCode::OP_RETURN)]
     fn opcode_can_be_converted_from_its_byte(#[case] byte: u8, #[case] expected: OpCode) {
         assert_eq!(OpCode::try_from(byte).unwrap(), expected);
     }
 
     #[rstest]
-    #[case(11)]
+    #[case(12)]
     #[case(u8::MAX)]
     fn invalid_opcode_bytes_are_rejected(#[case] byte: u8) {
         assert!(OpCode::try_from(byte).is_err());

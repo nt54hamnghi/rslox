@@ -109,8 +109,11 @@ impl<'chunk> VM<'chunk> {
             OpCode::OP_SUBTRACT => binary_op!(-),
             OpCode::OP_MULTIPLY => binary_op!(*),
             OpCode::OP_DIVIDE => binary_op!(/),
+            OpCode::OP_NOT => {
+                let value = self.stack.pop().unwrap();
+                self.stack.push(value.is_falsey().into()).unwrap();
+            }
             OpCode::OP_NEGATE => {
-                // OP_NEGATE expects a value on the stack.
                 let Value::Number(n) = self.stack.pop().unwrap() else {
                     return Err(self.error("operand must be a number"));
                 };
@@ -253,6 +256,24 @@ mod tests {
         vm.run().unwrap();
 
         assert_eq!(vm.stack.as_slice(), &[Value::from(expected)]);
+    }
+
+    #[rstest]
+    #[case::nil(Value::Nil, true)]
+    #[case::false_boolean(false.into(), true)]
+    #[case::true_boolean(true.into(), false)]
+    #[case::zero(0.0.into(), false)]
+    #[case::negative((-1.0).into(), false)]
+    #[case::positive(1.0.into(), false)]
+    fn op_not_negates_truthiness(#[case] operand: Value, #[case] expected: bool) {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(OpCode::OP_NOT, 1);
+
+        let mut vm = VM::new(&chunk);
+        vm.stack.push(operand).unwrap();
+        vm.run().unwrap();
+
+        assert_eq!(vm.stack.as_slice(), &[expected.into()]);
     }
 
     #[rstest]

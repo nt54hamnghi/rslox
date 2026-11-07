@@ -164,6 +164,7 @@ impl Token {
     fn prefix_rule(&self) -> Option<(OpCode, Precedence)> {
         match self.typ() {
             TokenType::MINUS => Some((OpCode::OP_NEGATE, Precedence::UNARY)),
+            TokenType::BANG => Some((OpCode::OP_NOT, Precedence::UNARY)),
             _ => None,
         }
     }

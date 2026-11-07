@@ -9,6 +9,12 @@ pub enum Value {
     Number(f64),
 }
 
+impl Value {
+    pub fn is_falsey(&self) -> bool {
+        matches!(self, Value::Nil | Value::Boolean(false))
+    }
+}
+
 impl From<bool> for Value {
     fn from(value: bool) -> Self {
         Self::Boolean(value)
@@ -51,5 +57,28 @@ impl fmt::Display for Value {
             Value::Number(n) => format!("{n}"),
         };
         write!(f, "{s}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use super::Value;
+
+    #[rstest]
+    #[case::nil(Value::Nil)]
+    #[case::false_boolean(Value::Boolean(false))]
+    fn is_falsey_for_nil_and_false(#[case] value: Value) {
+        assert!(value.is_falsey());
+    }
+
+    #[rstest]
+    #[case::true_boolean(Value::Boolean(true))]
+    #[case::zero(Value::Number(0.0))]
+    #[case::negative(Value::Number(-1.0))]
+    #[case::positive(Value::Number(1.0))]
+    fn is_not_falsey_for_true_and_numbers(#[case] value: Value) {
+        assert!(!value.is_falsey());
     }
 }
