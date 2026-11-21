@@ -1,10 +1,11 @@
 use std::iter::Peekable;
 
 use crate::chunk::{Chunk, OpCode};
+use crate::errors::LocationContext;
 use crate::scanner::token::{Token, TokenType};
 use crate::value::Value;
 
-pub fn compile(source: &str, chunk: &mut Chunk) -> Result<(), Error> {
+pub fn compile(source: &str, chunk: &mut Chunk) -> color_eyre::Result<()> {
     Parser::parse(source, chunk)
 }
 
@@ -16,16 +17,8 @@ struct Parser<'source, 'chunk> {
     current: Token,
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error("[line {line}] error at {loc}: {msg}")]
-pub struct Error {
-    msg: String,
-    loc: String,
-    line: usize,
-}
-
 impl<'source, 'chunk> Parser<'source, 'chunk> {
-    fn parse(source: &'source str, chunk: &'chunk mut Chunk) -> Result<(), Error> {
+    fn parse(source: &'source str, chunk: &'chunk mut Chunk) -> color_eyre::Result<()> {
         let mut scanner = Scanner::new(source).peekable();
         let Some(current) = scanner.next() else {
             panic!("scanner terminated without producing an EOF token")
@@ -43,7 +36,7 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
 
     /// Advances to the next token, then parses an expression with minimum binding power `min_bp`.
     /// Returns an error if the scanner is exhausted or parsing fails.
-    fn advance_expr(&mut self, min_bp: u8) -> Result<(), Error> {
+    fn advance_expr(&mut self, min_bp: u8) -> color_eyre::Result<()> {
         self.current = self
             .scanner
             .next()
@@ -52,7 +45,7 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
         self.expr(min_bp)
     }
 
-    fn expr(&mut self, min_bp: u8) -> Result<(), Error> {
+    fn expr(&mut self, min_bp: u8) -> color_eyre::Result<()> {
         let token = self.current;
 
         // parsing lhs
@@ -111,7 +104,7 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
         Ok(())
     }
 
-    fn grouping(&mut self) -> Result<(), Error> {
+    fn grouping(&mut self) -> color_eyre::Result<()> {
         self.advance_expr(0)?;
         self.consume(TokenType::RIGHT_PAREN, "expect ')' after expression")?;
         Ok(())
@@ -127,7 +120,7 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
         self.emit_constant(number.into());
     }
 
-    fn consume(&mut self, token_type: TokenType, msg: &str) -> Result<(), Error> {
+    fn consume(&mut self, token_type: TokenType, msg: &str) -> color_eyre::Result<()> {
         if self.scanner.next_if(|t| t.typ() == token_type).is_none() {
             return Err(self.error_at(self.current, msg));
         };
@@ -150,17 +143,13 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
         self.chunk.write_constant(value, line);
     }
 
-    fn error_at(&self, token: Token, msg: &str) -> Error {
-        let loc = match token.typ() {
-            TokenType::EOF => "end".to_owned(),
-            _ => format!("'{}'", token.lexeme(self.source)),
+    fn error_at(&self, token: Token, msg: &str) -> color_eyre::Report {
+        let span = match token.typ() {
+            TokenType::EOF => "end",
+            _ => token.lexeme(self.source),
         };
 
-        Error {
-            msg: msg.to_owned(),
-            loc,
-            line: token.line(),
-        }
+        msg.at_site(token.line(), span).into()
     }
 }
 

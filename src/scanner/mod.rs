@@ -1,6 +1,7 @@
 use std::iter::{FusedIterator, Peekable};
 use std::str::CharIndices;
 
+use crate::errors::LocationContext;
 use crate::scanner::token::{Token, TokenType};
 
 pub mod token;
@@ -15,16 +16,8 @@ pub struct Scanner<'source> {
     at_eof: bool,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("[line {line}] error: unterminated string")]
-    UnterminatedString { line: usize },
-    #[error("[line {line}] error: unexpected character '{char}'")]
-    UnexpectedCharacter { char: char, line: usize },
-}
-
 impl Iterator for Scanner<'_> {
-    type Item = Result<Token, Error>;
+    type Item = Result<Token, color_eyre::Report>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.at_eof {
@@ -79,10 +72,8 @@ impl Iterator for Scanner<'_> {
             '0'..='9' => self.number(),
             '_' | 'a'..='z' | 'A'..='Z' => self.identifier(),
             _ => {
-                return Some(Err(Error::UnexpectedCharacter {
-                    char: c,
-                    line: self.line,
-                }));
+                let err = format!("unexpected character '{c}'").at(self.line);
+                return Some(Err(err.into()));
             }
         };
         Some(Ok(token))
@@ -140,14 +131,15 @@ impl<'source> Scanner<'source> {
         self.make_token(typ, self.token_start + lexeme_len)
     }
 
-    fn string(&mut self) -> Result<Token, Error> {
+    fn string(&mut self) -> Result<Token, color_eyre::Report> {
         while let Some((_, c)) = self.next_char_if(|c| c != '"') {
             if c == '\n' {
                 self.line += 1;
             }
         }
         let Some((offset, _)) = self.next_char_eq('"') else {
-            return Err(Error::UnterminatedString { line: self.line });
+            let err = "unterminated string".at(self.line);
+            return Err(err.into());
         };
         let token = self.make_token(TokenType::STRING, offset + 1);
         Ok(token)
@@ -197,7 +189,7 @@ impl<'source> Scanner<'source> {
 mod tests {
     use rstest::rstest;
 
-    use super::{Error, Scanner, Token, TokenType};
+    use super::{Scanner, Token, TokenType};
 
     fn assert_eof_then_none(scanner: &mut Scanner<'_>) {
         assert!(scanner.next().unwrap().unwrap().typ() == TokenType::EOF);
@@ -221,10 +213,8 @@ mod tests {
     #[test]
     fn scanner_next_returns_unexpected_character_error() {
         let mut scanner = Scanner::new("@");
-        assert!(matches!(
-            scanner.next(),
-            Some(Err(Error::UnexpectedCharacter { char: '@', line: 1 }))
-        ));
+        let err = scanner.next().unwrap().unwrap_err();
+        assert_eq!(err.to_string(), "[line 1] error: unexpected character '@'");
         assert_eof_then_none(&mut scanner);
     }
 
@@ -380,16 +370,17 @@ mod tests {
     }
 
     #[rstest]
-    #[case::opening_quote("\"")]
-    #[case::text("\"hello")]
-    #[case::multiline("\"hello\nworld")]
-    fn scanner_next_returns_unterminated_string_error(#[case] source: &str) {
+    #[case::opening_quote("\"", 1)]
+    #[case::text("\"hello", 1)]
+    #[case::multiline("\"hello\nworld", 2)]
+    fn scanner_next_returns_unterminated_string_error(#[case] source: &str, #[case] line: usize) {
         let mut scanner = Scanner::new(source);
 
-        let Some(Err(Error::UnterminatedString { line })) = scanner.next() else {
-            panic!()
-        };
-        assert_eq!(line, scanner.line);
+        let err = scanner.next().unwrap().unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            format!("[line {line}] error: unterminated string")
+        );
         assert_eof_then_none(&mut scanner);
     }
 

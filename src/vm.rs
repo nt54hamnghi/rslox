@@ -1,8 +1,6 @@
-use color_eyre::eyre::eyre;
-
 use crate::chunk::{Chunk, OpCode, decode_u24_le};
 use crate::compiler::compile;
-use crate::errors::Error;
+use crate::errors::{Error, LocationContext};
 use crate::stack::Stack;
 use crate::value::Value;
 
@@ -24,7 +22,7 @@ impl<'chunk> VM<'chunk> {
 
     pub fn interpret(source: &str) -> Result<(), Error> {
         let mut chunk = Chunk::new();
-        compile(source, &mut chunk)?;
+        compile(source, &mut chunk).map_err(Error::Compile)?;
         let mut vm = VM::new(&chunk);
         vm.run()
     }
@@ -136,7 +134,7 @@ impl<'chunk> VM<'chunk> {
 
     fn error(&mut self, msg: &str) -> color_eyre::Report {
         let line = self.chunk.get_line(self.ip - 1);
-        eyre!("[line {line}] error: {msg}")
+        msg.at(line).into()
     }
 
     #[cfg(feature = "trace")]
