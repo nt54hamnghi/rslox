@@ -1,14 +1,17 @@
+use crate::alloc::heap::Heap;
+use crate::alloc::stack::Stack;
 use crate::chunk::{Chunk, OpCode, decode_u24_le};
 use crate::compiler::compile;
 use crate::errors::{Error, LocationContext};
-use crate::stack::Stack;
-use crate::value::Value;
+use crate::object::Object;
+use crate::value::{Str, Value};
 
 pub struct VM<'chunk> {
     chunk: &'chunk Chunk,
     // instruction pointer to the next instruction to execute
     ip: usize,
-    stack: Stack<Value, 512>,
+    stack: Stack<Value, 1024>,
+    heap: Heap,
 }
 
 impl<'chunk> VM<'chunk> {
@@ -17,6 +20,7 @@ impl<'chunk> VM<'chunk> {
             chunk,
             ip: 0,
             stack: Stack::new(),
+            heap: Heap::new(),
         }
     }
 
@@ -27,22 +31,22 @@ impl<'chunk> VM<'chunk> {
         vm.run()
     }
 
-    /// Reads the byte currently pointed at and advances the
-    /// instruction pointer
+    /// Returns the byte at the instruction pointer, then advances the pointer.
     fn read_byte(&mut self) -> u8 {
         let byte = self.chunk.code()[self.ip];
         self.ip += 1;
         byte
     }
 
-    /// Reads the constant index currently pointed at, advances the
-    /// instruction pointer, and returns the indexed value
+    /// Returns the constant value whose index is the byte at the instruction
+    /// pointer, then advances the pointer.
     fn read_constant(&mut self) -> Value {
         self.chunk.values()[self.read_byte() as usize]
     }
 
-    /// Reads the three-byte constant index currently pointed at, advances the
-    /// instruction pointer, and returns the indexed value
+    /// Returns the constant value whose index is represented by three bytes
+    /// starting at the instruction pointer, then advances the pointer pass
+    /// the three bytes.
     fn read_constant_24(&mut self) -> Value {
         let mut bytes = [0u8; 3];
         for b in &mut bytes {
@@ -106,11 +110,43 @@ impl<'chunk> VM<'chunk> {
             OpCode::OP_EQUAL => {
                 let b = self.stack.pop().unwrap();
                 let a = self.stack.pop().unwrap();
-                self.stack.push((a == b).into()).unwrap();
+
+                let equal = match (a, b) {
+                    (Value::Nil, Value::Nil) => true,
+                    (Value::Boolean(a), Value::Boolean(b)) => a == b,
+                    (Value::Number(a), Value::Number(b)) => a == b,
+                    (Value::String(a), Value::String(b)) => {
+                        // `as_str` returns `None` if the value is a heap-allocated object
+                        // whose pointer (object ID) points to an invalid heap location.
+                        // The values were just popped from the stack, so we expect them
+                        // to still be alive, unwrapping is OK here.
+                        let a = a.as_str(&self.heap).unwrap();
+                        let b = b.as_str(&self.heap).unwrap();
+                        a == b
+                    }
+                    _ => false,
+                };
+                self.stack.push(equal.into())?;
             }
             OpCode::OP_GREATER => binary_op!(>),
             OpCode::OP_LESS => binary_op!(<),
-            OpCode::OP_ADD => binary_op!(+),
+            OpCode::OP_ADD => {
+                let b = self.stack.pop().unwrap();
+                let a = self.stack.pop().unwrap();
+                let result = match (a, b) {
+                    (Value::Number(a), Value::Number(b)) => (a + b).into(),
+                    (Value::String(a), Value::String(b)) => {
+                        // unwrapping is OK here for the same reason as
+                        let a = a.as_str(&self.heap).unwrap();
+                        let b = b.as_str(&self.heap).unwrap();
+
+                        let id = self.heap.alloc(format!("{a}{b}"));
+                        Value::String(Str::Dynamic(id))
+                    }
+                    _ => return Err(self.error("both operands must be numbers or strings")),
+                };
+                self.stack.push(result)?;
+            }
             OpCode::OP_SUBTRACT => binary_op!(-),
             OpCode::OP_MULTIPLY => binary_op!(*),
             OpCode::OP_DIVIDE => binary_op!(/),
@@ -125,7 +161,9 @@ impl<'chunk> VM<'chunk> {
                 self.stack.push((-n).into()).unwrap();
             }
             OpCode::OP_RETURN => {
-                println!("{}", self.stack.pop().unwrap());
+                let value = self.stack.pop().unwrap();
+                // TODO: is unwrap ok here?
+                println!("{}", value.display(&self.heap).unwrap());
             }
         };
 
@@ -147,6 +185,30 @@ impl<'chunk> VM<'chunk> {
     }
 }
 
+impl Value {
+    fn display(&self, heap: &Heap) -> Option<String> {
+        let s = match self {
+            Value::Nil => "nil".to_owned(),
+            Value::Boolean(b) => format!("{b}"),
+            Value::Number(n) => format!("{n}"),
+            Value::String(s) => s.as_str(heap)?.to_owned(),
+        };
+        Some(s)
+    }
+}
+
+impl Str {
+    fn as_str<'h>(&self, heap: &'h Heap) -> Option<&'h str> {
+        let s = match *self {
+            Str::Literal(s) => s,
+            Str::Dynamic(id) => match heap.get(id)? {
+                Object::String(s) => s,
+            },
+        };
+        Some(s)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -154,6 +216,7 @@ mod tests {
     use super::VM;
     use crate::chunk::{Chunk, OpCode};
     use crate::errors::Error;
+    use crate::value::Str;
     use crate::value::Value;
 
     #[rstest]
@@ -373,11 +436,35 @@ mod tests {
     #[case(8.0.into(), Value::Nil)]
     #[case(8.0.into(), false.into())]
     #[case(true.into(), false.into())]
-    fn op_binary_rejects_non_numbers(
+    fn op_add_rejects_invalid_operands(#[case] left: Value, #[case] right: Value) {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(OpCode::OP_ADD, 1);
+
+        let mut vm = VM::new(&chunk);
+        // Leave a value below the operands to check that the error clears the stack.
+        vm.stack.push(Value::Nil).unwrap();
+        vm.stack.push(left).unwrap();
+        vm.stack.push(right).unwrap();
+
+        let err = vm.run().unwrap_err();
+        assert!(matches!(&err, Error::Runtime(_)));
+        assert_eq!(
+            err.to_string(),
+            "[line 1] error: both operands must be numbers or strings"
+        );
+        assert!(vm.stack.is_empty());
+    }
+
+    #[rstest]
+    #[case(Value::Nil, 2.0.into())]
+    #[case(true.into(), 2.0.into())]
+    #[case(8.0.into(), Value::Nil)]
+    #[case(8.0.into(), false.into())]
+    #[case(true.into(), false.into())]
+    fn op_numeric_binary_rejects_non_numbers(
         #[values(
             OpCode::OP_GREATER,
             OpCode::OP_LESS,
-            OpCode::OP_ADD,
             OpCode::OP_SUBTRACT,
             OpCode::OP_MULTIPLY,
             OpCode::OP_DIVIDE
@@ -390,22 +477,101 @@ mod tests {
         chunk.write_opcode(opcode, 1);
 
         let mut vm = VM::new(&chunk);
-        // keep a value below the operands to ensure that
-        // the stack is actually cleared after an error,
-        // rather than merely emptied when the operands
-        // are popped.
+        // Leave a value below the operands to check that the error clears the stack.
         vm.stack.push(Value::Nil).unwrap();
         vm.stack.push(left).unwrap();
         vm.stack.push(right).unwrap();
 
-        let res = vm.run();
-        assert!(matches!(&res, Err(Error::Runtime(_))));
-
-        let err = res.unwrap_err();
+        let err = vm.run().unwrap_err();
+        assert!(matches!(&err, Error::Runtime(_)));
         assert_eq!(
             err.to_string(),
             "[line 1] error: both operands must be numbers"
         );
         assert!(vm.stack.is_empty());
+    }
+
+    #[rstest]
+    #[case::equal("lox", "lox", true)]
+    #[case::diff("lox", "rust", false)]
+    fn op_equal_compares_literal_strings(
+        #[case] left: &'static str,
+        #[case] right: &'static str,
+        #[case] expected: bool,
+    ) {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(OpCode::OP_EQUAL, 1);
+
+        let mut vm = VM::new(&chunk);
+        vm.stack.push(left.into()).unwrap();
+        vm.stack.push(right.into()).unwrap();
+        vm.run().unwrap();
+
+        assert_eq!(vm.stack.as_slice(), &[expected.into()]);
+    }
+
+    #[rstest]
+    #[case::equal("lox", "lox", true)]
+    #[case::diff("lox", "rust", false)]
+    fn op_equal_compares_dynamic_strings(
+        #[case] left: &str,
+        #[case] right: &str,
+        #[case] expected: bool,
+    ) {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(OpCode::OP_EQUAL, 1);
+
+        let mut vm = VM::new(&chunk);
+        let left = vm.alloc_string(left);
+        let right = vm.alloc_string(right);
+        vm.stack.push(left).unwrap();
+        vm.stack.push(right).unwrap();
+        vm.run().unwrap();
+
+        assert_eq!(vm.stack.as_slice(), &[expected.into()]);
+    }
+
+    impl<'chunk> VM<'chunk> {
+        fn alloc_string(&mut self, s: impl Into<String>) -> Value {
+            Value::String(Str::Dynamic(self.heap.alloc(s.into())))
+        }
+    }
+
+    #[rstest]
+    #[case::equal("lox", "lox", true)]
+    #[case::diff("lox", "rust", false)]
+    fn op_equal_compares_literal_and_dynamic_strings(
+        #[case] left: &'static str,
+        #[case] right: &str,
+        #[case] expected: bool,
+    ) {
+        let mut chunk = Chunk::new();
+        chunk.write_opcode(OpCode::OP_EQUAL, 1);
+
+        let mut vm = VM::new(&chunk);
+        let right = vm.alloc_string(right);
+        vm.stack.push(left.into()).unwrap();
+        vm.stack.push(right).unwrap();
+        vm.run().unwrap();
+
+        assert_eq!(vm.stack.as_slice(), &[expected.into()]);
+    }
+
+    #[test]
+    fn op_add_concatenates_strings_in_operand_order() {
+        let mut chunk = Chunk::new();
+        chunk.write_constant("left".into(), 1);
+        chunk.write_constant("-middle".into(), 1);
+        chunk.write_opcode(OpCode::OP_ADD, 1);
+        chunk.write_constant("-right".into(), 1);
+        chunk.write_opcode(OpCode::OP_ADD, 1);
+
+        let mut vm = VM::new(&chunk);
+        vm.run().unwrap();
+
+        let [Value::String(string @ Str::Dynamic(_))] = vm.stack.as_slice() else {
+            panic!("expected one heap-allocated string on the stack");
+        };
+        assert_eq!(string.as_str(&vm.heap), Some("left-middle-right"));
     }
 }

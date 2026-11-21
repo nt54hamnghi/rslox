@@ -2,7 +2,7 @@ use std::iter::Peekable;
 
 use crate::chunk::{Chunk, OpCode};
 use crate::errors::LocationContext;
-use crate::scanner::token::{Token, TokenType};
+use crate::token::{Token, TokenType};
 use crate::value::Value;
 
 pub fn compile(source: &str, chunk: &mut Chunk) -> color_eyre::Result<()> {
@@ -52,6 +52,7 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
         match token.typ() {
             TokenType::EOF => return Ok(()),
             TokenType::NUMBER => self.number(),
+            TokenType::STRING => self.string(),
             TokenType::NIL => self.emit_opcode(OpCode::OP_NIL),
             TokenType::TRUE => self.emit_opcode(OpCode::OP_TRUE),
             TokenType::FALSE => self.emit_opcode(OpCode::OP_FALSE),
@@ -114,10 +115,20 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
         let token = self.current;
         debug_assert_eq!(token.typ(), TokenType::NUMBER);
 
-        // the scanner only produces NUMBER tokens for valid numeric literals
         let lexeme = token.lexeme(self.source);
+        // the scanner produces NUMBER tokens only for valid numeric literals
         let number = lexeme.parse::<f64>().unwrap();
         self.emit_constant(number.into());
+    }
+
+    fn string(&mut self) {
+        debug_assert_eq!(self.current.typ(), TokenType::STRING);
+
+        let lexeme = self.current.lexeme(self.source);
+        // trim the surrounding double quotes
+        let content = lexeme[1..lexeme.len() - 1].to_owned();
+        let string: &'static str = Box::leak(Box::new(content));
+        self.emit_constant(string.into());
     }
 
     fn consume(&mut self, token_type: TokenType, msg: &str) -> color_eyre::Result<()> {
@@ -275,7 +286,7 @@ mod tests {
 
     use super::*;
     use crate::chunk::{Chunk, OpCode};
-    use crate::scanner::token::{Token, TokenType};
+    use crate::token::{Token, TokenType};
     use crate::value::Value;
 
     #[test]

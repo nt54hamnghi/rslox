@@ -26,13 +26,13 @@ impl Chunk {
             OpCode::OP_CONSTANT => {
                 let index = self.code[offset + 1] as usize;
                 let value = self.constants[index];
-                println!("{opcode:<18} {index:>4} {value}");
+                println!("{opcode:<18} {index:>4} {value:?}");
             }
             OpCode::OP_CONSTANT_24 => {
                 let bytes = &self.code[offset + 1..=offset + 3];
                 let index = decode_u24_le(bytes);
                 let value = self.constants[index];
-                println!("{opcode:<18} {index:>4} {value}");
+                println!("{opcode:<18} {index:>4} {value:?}");
             }
             OpCode::OP_NIL
             | OpCode::OP_TRUE

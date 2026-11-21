@@ -2,9 +2,7 @@ use std::iter::{FusedIterator, Peekable};
 use std::str::CharIndices;
 
 use crate::errors::LocationContext;
-use crate::scanner::token::{Token, TokenType};
-
-pub mod token;
+use crate::token::{Token, TokenType};
 
 #[derive(Debug)]
 pub struct Scanner<'source> {

@@ -1,12 +1,21 @@
-use std::fmt;
-
 use color_eyre::eyre::bail;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+use crate::object::ObjectId;
+
+#[derive(Debug, Clone, Copy)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum Value {
     Nil,
     Boolean(bool),
     Number(f64),
+    String(Str),
+}
+
+#[derive(Debug, Clone, Copy)]
+#[cfg_attr(test, derive(PartialEq))]
+pub enum Str {
+    Literal(&'static str),
+    Dynamic(ObjectId),
 }
 
 impl Value {
@@ -24,6 +33,12 @@ impl From<bool> for Value {
 impl From<f64> for Value {
     fn from(value: f64) -> Self {
         Self::Number(value)
+    }
+}
+
+impl From<&'static str> for Value {
+    fn from(value: &'static str) -> Self {
+        Self::String(Str::Literal(value))
     }
 }
 
@@ -46,17 +61,6 @@ impl TryFrom<Value> for f64 {
             Value::Number(value) => Ok(value),
             value => bail!("expected number, got {value:?}"),
         }
-    }
-}
-
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            Value::Nil => "nil".to_owned(),
-            Value::Boolean(b) => format!("{b}"),
-            Value::Number(n) => format!("{n}"),
-        };
-        write!(f, "{s}")
     }
 }
 
