@@ -1,9 +1,15 @@
+use std::cell::RefCell;
+use std::collections::HashSet;
 use std::iter::Peekable;
 
 use crate::chunk::{Chunk, OpCode};
 use crate::errors::LocationContext;
 use crate::token::{Token, TokenType};
 use crate::value::Value;
+
+thread_local! {
+    static STRINGS: RefCell<HashSet<&'static str>> = RefCell::new(HashSet::default());
+}
 
 pub fn compile(source: &str, chunk: &mut Chunk) -> color_eyre::Result<()> {
     Parser::parse(source, chunk)
@@ -125,9 +131,20 @@ impl<'source, 'chunk> Parser<'source, 'chunk> {
         debug_assert_eq!(self.current.typ(), TokenType::STRING);
 
         let lexeme = self.current.lexeme(self.source);
-        // trim the surrounding double quotes
-        let content = lexeme[1..lexeme.len() - 1].to_owned();
-        let string: &'static str = Box::leak(Box::new(content));
+        let string: &'static str = STRINGS.with_borrow_mut(|set| {
+            // trim surrounding double quotes
+            let content = lexeme[1..lexeme.len() - 1].to_owned();
+            match set.get(content.as_str()) {
+                Some(s) => *s,
+                None => {
+                    // intern the string
+                    let s: &'static str = Box::leak(Box::new(content));
+                    set.insert(s);
+                    s
+                }
+            }
+        });
+
         self.emit_constant(string.into());
     }
 
