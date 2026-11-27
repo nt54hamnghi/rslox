@@ -1,6 +1,8 @@
+use std::fmt::Display;
+
 use color_eyre::eyre::bail;
 
-use crate::object::ObjectId;
+use crate::alloc::heap::string::Str;
 
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(test, derive(PartialEq))]
@@ -11,16 +13,20 @@ pub enum Value {
     String(Str),
 }
 
-#[derive(Debug, Clone, Copy)]
-#[cfg_attr(test, derive(PartialEq))]
-pub enum Str {
-    Literal(&'static str),
-    Dynamic(ObjectId),
-}
-
 impl Value {
     pub fn is_falsey(&self) -> bool {
         matches!(self, Value::Nil | Value::Boolean(false))
+    }
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Nil => write!(f, "nil"),
+            Value::Boolean(value) => write!(f, "{value}"),
+            Value::Number(value) => write!(f, "{value}"),
+            Value::String(value) => write!(f, "{value}"),
+        }
     }
 }
 
@@ -36,9 +42,9 @@ impl From<f64> for Value {
     }
 }
 
-impl From<&'static str> for Value {
-    fn from(value: &'static str) -> Self {
-        Self::String(Str::Literal(value))
+impl From<Str> for Value {
+    fn from(value: Str) -> Self {
+        Self::String(value)
     }
 }
 

@@ -3,8 +3,7 @@ use crate::alloc::stack::Stack;
 use crate::chunk::{Chunk, OpCode, decode_u24_le};
 use crate::compiler::compile;
 use crate::errors::{Error, LocationContext};
-use crate::object::Object;
-use crate::value::{Str, Value};
+use crate::value::Value;
 
 pub struct VM<'chunk> {
     chunk: &'chunk Chunk,
@@ -116,12 +115,8 @@ impl<'chunk> VM<'chunk> {
                     (Value::Boolean(a), Value::Boolean(b)) => a == b,
                     (Value::Number(a), Value::Number(b)) => a == b,
                     (Value::String(a), Value::String(b)) => {
-                        // `as_str` returns `None` if the value is a heap-allocated object
-                        // whose pointer (object ID) points to an invalid heap location.
-                        // The values were just popped from the stack, so we expect them
-                        // to still be alive, unwrapping is OK here.
-                        let a = a.as_str(&self.heap).unwrap();
-                        let b = b.as_str(&self.heap).unwrap();
+                        let a = a.as_str();
+                        let b = b.as_str();
                         a == b
                     }
                     _ => false,
@@ -136,12 +131,9 @@ impl<'chunk> VM<'chunk> {
                 let result = match (a, b) {
                     (Value::Number(a), Value::Number(b)) => (a + b).into(),
                     (Value::String(a), Value::String(b)) => {
-                        // unwrapping is OK here for the same reason as
-                        let a = a.as_str(&self.heap).unwrap();
-                        let b = b.as_str(&self.heap).unwrap();
-
-                        let id = self.heap.alloc(format!("{a}{b}"));
-                        Value::String(Str::Dynamic(id))
+                        let a = a.as_str();
+                        let b = b.as_str();
+                        self.heap.alloc_str(format!("{a}{b}")).into()
                     }
                     _ => return Err(self.error("both operands must be numbers or strings")),
                 };
@@ -162,8 +154,7 @@ impl<'chunk> VM<'chunk> {
             }
             OpCode::OP_RETURN => {
                 let value = self.stack.pop().unwrap();
-                // TODO: is unwrap ok here?
-                println!("{}", value.display(&self.heap).unwrap());
+                println!("{}", value);
             }
         };
 
@@ -185,30 +176,6 @@ impl<'chunk> VM<'chunk> {
     }
 }
 
-impl Value {
-    fn display(&self, heap: &Heap) -> Option<String> {
-        let s = match self {
-            Value::Nil => "nil".to_owned(),
-            Value::Boolean(b) => format!("{b}"),
-            Value::Number(n) => format!("{n}"),
-            Value::String(s) => s.as_str(heap)?.to_owned(),
-        };
-        Some(s)
-    }
-}
-
-impl Str {
-    fn as_str<'h>(&self, heap: &'h Heap) -> Option<&'h str> {
-        let s = match *self {
-            Str::Literal(s) => s,
-            Str::Dynamic(id) => match heap.get(id)? {
-                Object::String(s) => s,
-            },
-        };
-        Some(s)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -216,7 +183,6 @@ mod tests {
     use super::VM;
     use crate::chunk::{Chunk, OpCode};
     use crate::errors::Error;
-    use crate::value::Str;
     use crate::value::Value;
 
     #[rstest]
@@ -494,36 +460,13 @@ mod tests {
     #[rstest]
     #[case::equal("lox", "lox", true)]
     #[case::diff("lox", "rust", false)]
-    fn op_equal_compares_literal_strings(
-        #[case] left: &'static str,
-        #[case] right: &'static str,
-        #[case] expected: bool,
-    ) {
+    fn op_equal_compares_strings(#[case] left: &str, #[case] right: &str, #[case] expected: bool) {
         let mut chunk = Chunk::new();
         chunk.write_opcode(OpCode::OP_EQUAL, 1);
 
         let mut vm = VM::new(&chunk);
-        vm.stack.push(left.into()).unwrap();
-        vm.stack.push(right.into()).unwrap();
-        vm.run().unwrap();
-
-        assert_eq!(vm.stack.as_slice(), &[expected.into()]);
-    }
-
-    #[rstest]
-    #[case::equal("lox", "lox", true)]
-    #[case::diff("lox", "rust", false)]
-    fn op_equal_compares_dynamic_strings(
-        #[case] left: &str,
-        #[case] right: &str,
-        #[case] expected: bool,
-    ) {
-        let mut chunk = Chunk::new();
-        chunk.write_opcode(OpCode::OP_EQUAL, 1);
-
-        let mut vm = VM::new(&chunk);
-        let left = vm.alloc_string(left);
-        let right = vm.alloc_string(right);
+        let left = vm.heap.alloc_str(left).into();
+        let right = vm.heap.alloc_str(right).into();
         vm.stack.push(left).unwrap();
         vm.stack.push(right).unwrap();
         vm.run().unwrap();
@@ -531,47 +474,21 @@ mod tests {
         assert_eq!(vm.stack.as_slice(), &[expected.into()]);
     }
 
-    impl<'chunk> VM<'chunk> {
-        fn alloc_string(&mut self, s: impl Into<String>) -> Value {
-            Value::String(Str::Dynamic(self.heap.alloc(s.into())))
-        }
-    }
-
-    #[rstest]
-    #[case::equal("lox", "lox", true)]
-    #[case::diff("lox", "rust", false)]
-    fn op_equal_compares_literal_and_dynamic_strings(
-        #[case] left: &'static str,
-        #[case] right: &str,
-        #[case] expected: bool,
-    ) {
+    #[test]
+    fn op_add_concatenates_strings() {
         let mut chunk = Chunk::new();
-        chunk.write_opcode(OpCode::OP_EQUAL, 1);
+        chunk.write_opcode(OpCode::OP_ADD, 1);
 
         let mut vm = VM::new(&chunk);
-        let right = vm.alloc_string(right);
-        vm.stack.push(left.into()).unwrap();
+        let left = vm.heap.alloc_str("left").into();
+        let right = vm.heap.alloc_str("-right").into();
+        vm.stack.push(left).unwrap();
         vm.stack.push(right).unwrap();
         vm.run().unwrap();
 
-        assert_eq!(vm.stack.as_slice(), &[expected.into()]);
-    }
-
-    #[test]
-    fn op_add_concatenates_strings_in_operand_order() {
-        let mut chunk = Chunk::new();
-        chunk.write_constant("left".into(), 1);
-        chunk.write_constant("-middle".into(), 1);
-        chunk.write_opcode(OpCode::OP_ADD, 1);
-        chunk.write_constant("-right".into(), 1);
-        chunk.write_opcode(OpCode::OP_ADD, 1);
-
-        let mut vm = VM::new(&chunk);
-        vm.run().unwrap();
-
-        let [Value::String(string @ Str::Dynamic(_))] = vm.stack.as_slice() else {
+        let [Value::String(string)] = vm.stack.as_slice() else {
             panic!("expected one heap-allocated string on the stack");
         };
-        assert_eq!(string.as_str(&vm.heap), Some("left-middle-right"));
+        assert_eq!(string.as_str(), "left-right");
     }
 }
